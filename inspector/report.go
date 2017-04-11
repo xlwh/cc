@@ -78,7 +78,6 @@ func FixClusterCircle() {
 	// 定时fixcluster，针对 len(failnodes) == len (freednodes) 情况自动修复
 	app := meta.GetAppConfig()
 	trickerTime := app.FixClusterCircle
-	aotuFixCluster := app.AotuFixCluster
 
 	if trickerTime == 0 {
 		trickerTime = meta.DEFAULT_FIXCLUSTER_CIRCLE
@@ -87,8 +86,10 @@ func FixClusterCircle() {
 	for {
 		select {
 			case <-tickChan:
+				app = meta.GetAppConfig()
+				aotuFixCluster := app.AotuFixCluster
 				glog.Infof("ClusterLeader:%s, RegionLeader:%s", meta.ClusterLeaderZNodeName(), meta.RegionLeaderZNodeName())
-				if meta.IsClusterLeader() && aotuFixCluster{				
+				if meta.IsClusterLeader() && aotuFixCluster {
 					addr := meta.LeaderHttpAddress()
 					url := "http://" + addr + api.FixClusterPath
 					_, err := utils.HttpPost(url, nil, 0)
@@ -96,7 +97,7 @@ func FixClusterCircle() {
 						glog.Info(err.Error())
 					}
 				}
-		}
+			}
 	}
 }
 

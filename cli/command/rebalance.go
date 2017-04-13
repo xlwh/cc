@@ -51,6 +51,10 @@ func rebalanceAction(c *cli.Context) {
 		fmt.Println(err)
 		return
 	}
+	if resp.Body == nil {
+		fmt.Println("No need to execute rebalance")
+		return
+	}
 	for _, v := range resp.Body.([]interface{}) {
 		sourceId := v.(map[string]interface{})["SourceId"]
 		targetId := v.(map[string]interface{})["TargetId"]

@@ -31,7 +31,7 @@ var AppModCommand = cli.Command{
 		cli.IntFlag{"u,fetchinterval", -1, "Fetch cluster nodes interval"},
 		cli.IntFlag{"c,migrateconcurrency", -1, "number of migrate task running concurrently"},
 		cli.IntFlag{"e,fixclustercircle", -1, "period of fix cluster , s(second)"},
-		cli.StringFlag{"a,AotuFixCluster", "", "AotuFixCluster <true> or <false>"},
+		cli.StringFlag{"a,AutoFixCluster", "", "AutoFixCluster <true> or <false>"},
 	},
 	Description: `
     update app configuraton in zookeeper
@@ -110,9 +110,9 @@ func appModAction(c *cli.Context) {
 	}
 	if a != "" {
 		if a == "true" {
-			appConfig.AotuFixCluster = true
+			appConfig.AutoFixCluster = true
 		} else if a == "false" {
-			appConfig.AotuFixCluster = false
+			appConfig.AutoFixCluster = false
 		}
 	}
 	if k != -1 {

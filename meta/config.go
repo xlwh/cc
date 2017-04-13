@@ -36,7 +36,7 @@ type AppConfig struct {
 	FetchClusterNodesInterval time.Duration
 	MigrateConcurrency        int
 	FixClusterCircle		  int
-	AotuFixCluster			  bool
+	AutoFixCluster			  bool
 }
 
 type ControllerConfig struct {

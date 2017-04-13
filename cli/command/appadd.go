@@ -32,7 +32,7 @@ var AppAddCommand = cli.Command{
 		cli.IntFlag{"u,fetchinterval", 1, "fetch cluster nodes interval"},
 		cli.IntFlag{"c,migrateconcurrency", 10, "number of migrate tasks run concurrently"},
 		cli.IntFlag{"e,fixclustercircle", 10, "period of fix cluster , s(second)"},
-		cli.BoolFlag{"a,AotuFixCluster", "AotuFixCluster"},
+		cli.BoolFlag{"a,AutoFixCluster", "AutoFixCluster"},
 	},
 	Description: `
     add app configuration to zookeeper
@@ -75,7 +75,7 @@ func appAddAction(c *cli.Context) {
 		FetchClusterNodesInterval: time.Duration(u),
 		MigrateConcurrency:        mc,
 		FixClusterCircle:          e,
-		AotuFixCluster:        	   a,
+		AutoFixCluster:        	   a,
 	}
 	out, err := json.Marshal(appConfig)
 	if err != nil {

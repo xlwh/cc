@@ -87,9 +87,9 @@ func FixClusterCircle() {
 		select {
 			case <-tickChan:
 				app = meta.GetAppConfig()
-				aotuFixCluster := app.AotuFixCluster
+				autouFixCluster := app.AutoFixCluster
 				glog.Infof("ClusterLeader:%s, RegionLeader:%s", meta.ClusterLeaderZNodeName(), meta.RegionLeaderZNodeName())
-				if meta.IsClusterLeader() && aotuFixCluster {
+				if meta.IsClusterLeader() && autouFixCluster {
 					addr := meta.LeaderHttpAddress()
 					url := "http://" + addr + api.FixClusterPath
 					_, err := utils.HttpPost(url, nil, 0)

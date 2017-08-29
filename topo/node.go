@@ -9,11 +9,14 @@ import (
 	"strings"
 )
 
+//记录Slot的起始点
 type Range struct {
 	Left  int
 	Right int
 }
 
+//range信息转换成为字符串返回
+//调用Sprintf输出
 func (r Range) String() string {
 	if r.Left == r.Right {
 		return fmt.Sprint(r.Left)
@@ -21,14 +24,19 @@ func (r Range) String() string {
 	return fmt.Sprintf("%d-%d", r.Left, r.Right)
 }
 
+//slots数目
 func (r Range) NumSlots() int {
 	return (r.Right - r.Left + 1)
 }
 
+//在一个node上，可能有多个ranges
+//用一个数组表示
 type Ranges []Range
 
+//将所有的range字符串输出
 func (rs Ranges) String() string {
 	slots := ""
+	//遍历每个range调用String方法输出
 	for _, r := range rs {
 		slots += r.String() + ","
 	}
@@ -38,6 +46,7 @@ func (rs Ranges) String() string {
 	return slots
 }
 
+//所有range上的slot的数目
 func (rs Ranges) NumSlots() int {
 	sum := 0
 	for _, r := range rs {
@@ -46,26 +55,30 @@ func (rs Ranges) NumSlots() int {
 	return sum
 }
 
+//节点的信息
 type SummaryInfo struct {
-	UsedMemory              int64
-	Keys                    int64
-	Expires                 int64
-	MasterLinkStatus        string
+	UsedMemory              int64  //内存使用
+	Keys                    int64  //key数量
+	Expires                 int64  //过期key数量
+	MasterLinkStatus        string //主链接状态
 	MasterSyncLeftBytes     int64
 	ReplOffset              int64
-	Loading                 bool
-	RdbBgsaveInProgress     bool
-	InstantaneousOpsPerSec  int
-	InstantaneousInputKbps  float64
-	InstantaneousOutputKbps float64
+	Loading                 bool    //节点负载
+	RdbBgsaveInProgress     bool    //RDB进度
+	InstantaneousOpsPerSec  int     //每秒的操作
+	InstantaneousInputKbps  float64 //入口网卡占用
+	InstantaneousOutputKbps float64 //出口网卡占用
 }
 
+//按行读取，设置SummaryInfo
+//k:v
 func (s *SummaryInfo) ReadLine(line string) {
 	xs := strings.Split(strings.TrimSpace(line), " ")
 	xs = strings.Split(xs[1], ":")
 	s.SetField(xs[0], xs[1])
 }
 
+//解析k:v，设置到Summary中去
 func (s *SummaryInfo) SetField(key, val string) {
 	switch key {
 	case "used_memory":
@@ -101,30 +114,34 @@ func (s *SummaryInfo) SetField(key, val string) {
 	}
 }
 
+//Redis节点的数据结构描述
 type Node struct {
-	Ip        string
-	Port      int
-	Id        string
-	ParentId  string
-	Migrating map[string][]int
-	Importing map[string][]int
-	Readable  bool
-	Writable  bool
-	PFail     bool
-	Fail      bool
-	Free      bool // 是否是游离于集群之外的节点（ClusterNodes信息里只有一个节点，主，无slots）
-	Role      string
-	Tag       string
-	Region    string
-	Zone      string
-	Room      string
-	Ranges    []Range
-	FailCount int
-	hostname  string
-	SummaryInfo
-	ClusterInfo
+	Ip          string           //节点ip
+	Port        int              //节点端口
+	Id          string           //节点id
+	ParentId    string           //父节点id
+	Migrating   map[string][]int //迁移节点，故障的节点列表string:int[]
+	Importing   map[string][]int //迁入节点列表string:int[]
+	Readable    bool             //是否可读
+	Writable    bool             //是否可写
+	PFail       bool             //是否是主观故障
+	Fail        bool             //是否处于故障状态
+	Free        bool             //是否是游离于集群之外的节点（ClusterNodes信息里只有一个节点，主，无slots）
+	Role        string           //节点角色
+	Tag         string           //节点Tag
+	Region      string           //节点所在地域
+	Zone        string           //节点区域
+	Room        string           //节点物理机房(jx\bjyz\gzns)
+	Ranges      []Range
+	FailCount   int    //挂掉的节点的数量
+	hostname    string //机器名
+	SummaryInfo        //总的信息
+	ClusterInfo        //集群信息
 }
 
+//给定string列表，创建node
+//服务初始化的时候用到这个
+//解析出ip和端口，调用node创建方法进行创建
 func NewNodeFromString(addr string) *Node {
 	xs := strings.Split(addr, ":")
 	if len(xs) != 2 {
@@ -140,8 +157,11 @@ func NewNodeFromString(addr string) *Node {
 	return NewNode(xs[0], port)
 }
 
+//创建节点
 func NewNode(ip string, port int) *Node {
+	//正则判断是否是IP
 	matched, _ := regexp.MatchString("\\d+\\.\\d+\\.\\d+\\.\\d+", ip)
+	//如果不是ID，则会尝试解析一下
 	if !matched {
 		// 'ip' is a hostname
 		ips, err := net.LookupIP(ip)
@@ -151,6 +171,7 @@ func NewNode(ip string, port int) *Node {
 		ip = ips[0].String()
 	}
 
+	//创建node
 	node := Node{
 		Ip:        ip,
 		Port:      port,
@@ -158,23 +179,29 @@ func NewNode(ip string, port int) *Node {
 		Migrating: map[string][]int{},
 		Importing: map[string][]int{},
 	}
+
+	//返回创建好的node的地址
 	return &node
 }
 
+//获取node的ip:port
 func (s *Node) Addr() string {
 	return fmt.Sprintf("%s:%d", s.Ip, s.Port)
 }
 
+//设置node的id
 func (s *Node) SetId(id string) *Node {
 	s.Id = id
 	return s
 }
 
+//设置node的父id（不知道有什么作用呢?）
 func (s *Node) SetParentId(pid string) *Node {
 	s.ParentId = pid
 	return s
 }
 
+//指定nodeID，添加迁移中的sloat
 func (s *Node) AddMigrating(nodeId string, slot int) *Node {
 	s.Migrating[nodeId] = append(s.Migrating[nodeId], slot)
 	return s

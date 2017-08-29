@@ -207,52 +207,64 @@ func (s *Node) AddMigrating(nodeId string, slot int) *Node {
 	return s
 }
 
+//指定nodeID设定slot为迁入sloat
 func (s *Node) AddImporting(nodeId string, slot int) *Node {
 	s.Importing[nodeId] = append(s.Importing[nodeId], slot)
 	return s
 }
 
+//设置node可读状态
 func (s *Node) SetReadable(val bool) *Node {
 	s.Readable = val
 	return s
 }
 
+//设置node的可写状态
 func (s *Node) SetWritable(val bool) *Node {
 	s.Writable = val
 	return s
 }
 
+//设置node主观Fail
 func (s *Node) SetPFail(val bool) *Node {
 	s.PFail = val
 	return s
 }
 
+//设置节点fail
 func (s *Node) SetFail(val bool) *Node {
 	s.Fail = val
 	return s
 }
 
+//读取PFailCount
 func (s *Node) PFailCount() int {
 	return s.FailCount
 }
 
+//PFailCount++
+//可以让别的节点给这个节点投票的接口
 func (s *Node) IncrPFailCount() {
 	s.FailCount++
 }
 
+//判断这个节点是否是主节点
 func (s *Node) IsMaster() bool {
 	return s.Role == "master"
 }
 
+//这个节点是否是备用的Master
 func (s *Node) IsStandbyMaster() bool {
 	return (s.Role == "master" && s.Fail && len(s.Ranges) == 0)
 }
 
+//设置节点的角色
 func (s *Node) SetRole(val string) *Node {
 	s.Role = val
 	return s
 }
 
+//设置Tag
 func (s *Node) SetTag(val string) *Node {
 	s.Tag = val
 	return s
@@ -282,10 +294,12 @@ func (s *Node) AddRange(r Range) {
 	s.Ranges = append(s.Ranges, r)
 }
 
+//判断这个节点是否是一个空的Node，sloat为空
 func (s *Node) Empty() bool {
 	return len(s.Ranges) == 0
 }
 
+//节点上的slot数目
 func (s *Node) NumSlots() int {
 	total := 0
 	for _, r := range s.Ranges {
@@ -294,24 +308,40 @@ func (s *Node) NumSlots() int {
 	return total
 }
 
+//给定range数目，把所有的slot均匀分配一遍
+//应该是需在适当的必要情况下，需要对slot重置
 func (s *Node) RangesSplitN(n int) [][]Range {
 	total := s.NumSlots()
+	//计算出每个range上的slot数目
 	numSlotsPerPart := int(math.Ceil(float64(total) / float64(n)))
 
+	//保存每部分的slot的id
 	parts := [][]Range{}
+	//保存range
 	ranges := []Range{}
+	//每个range上需要放的node数目
 	need := numSlotsPerPart
+
+	//遍历当前node上的range，分别进行处理
 	for i := len(s.Ranges) - 1; i >= 0; i-- {
 		rang := s.Ranges[i]
+		//range中的slot数目
 		num := rang.NumSlots()
+
+		//当前range上的slot比need少
 		if need > num {
-			need -= num
+			need -= num //need = need - num
 			ranges = append(ranges, rang)
+			//相等
 		} else if need == num {
 			ranges = append(ranges, rang)
 			parts = append(parts, ranges)
+
+			//ranges重置为空
 			ranges = []Range{}
 			need = numSlotsPerPart
+
+			//在range上的数目比预期的多了
 		} else {
 			ranges = append(ranges, Range{
 				Left:  rang.Right - need + 1,
@@ -332,12 +362,14 @@ func (s *Node) RangesSplitN(n int) [][]Range {
 			need = numSlotsPerPart - remain.NumSlots()
 		}
 	}
+
 	if len(ranges) > 0 {
 		parts = append(parts, ranges)
 	}
 	return parts
 }
 
+//比较两个node是否相同
 func (s *Node) Compare(t *Node) bool {
 	b := true
 	b = b && (s.Port == t.Port)
@@ -349,6 +381,7 @@ func (s *Node) Compare(t *Node) bool {
 	return b
 }
 
+//获取节点的机器名
 func (s *Node) Hostname() string {
 	if s.hostname == "" {
 		addr, err := net.LookupAddr(s.Ip)
@@ -361,6 +394,7 @@ func (s *Node) Hostname() string {
 	return s.hostname
 }
 
+//获取机器的机房信息
 func (s *Node) MachineRoom() string {
 	xs := strings.Split(s.Hostname(), ".")
 	if len(xs) != 2 {

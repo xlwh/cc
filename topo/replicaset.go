@@ -1,19 +1,23 @@
 package topo
 
+//主从结构存储
 type ReplicaSet struct {
 	Master *Node
 	Slaves []*Node
 }
 
+//创建一个空的
 func NewReplicaSet() *ReplicaSet {
 	rs := &ReplicaSet{}
 	return rs
 }
 
+//设置主节点
 func (s *ReplicaSet) SetMaster(node *Node) {
 	s.Master = node
 }
 
+//给主添加一个从
 func (s *ReplicaSet) AddSlave(node *Node) {
 	s.Slaves = append(s.Slaves, node)
 }

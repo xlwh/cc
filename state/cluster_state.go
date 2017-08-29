@@ -15,12 +15,14 @@ var (
 	ErrNodeNotExist = errors.New("cluster: node not exist")
 )
 
+//集群状态信息
 type ClusterState struct {
 	version    int64                 // 更新消息处理次数
 	cluster    *topo.Cluster         // 集群拓扑快照
 	nodeStates map[string]*NodeState // 节点状态机
 }
 
+//新建一个状态
 func NewClusterState() *ClusterState {
 	cs := &ClusterState{
 		version:    0,
@@ -29,10 +31,12 @@ func NewClusterState() *ClusterState {
 	return cs
 }
 
+//查询cluster中的所有节点的状态机
 func (cs *ClusterState) AllNodeStates() map[string]*NodeState {
 	return cs.nodeStates
 }
 
+//按照节点id进行排序，返回第一个节点
 func (cs *ClusterState) GetFirstNodeState() *NodeState {
 	// only choose health node
 	var keys []string
@@ -49,22 +53,31 @@ func (cs *ClusterState) GetFirstNodeState() *NodeState {
 	return cs.nodeStates[keys[0]]
 }
 
+//更新本地域所有节点的状态
 func (cs *ClusterState) UpdateRegionNodes(region string, nodes []*topo.Node) {
+	//版本+1
 	cs.version++
 	now := time.Now()
 
+	//会记录一条日志
 	log.Verbosef("CLUSTER", "Update region %s %d nodes", region, len(nodes))
 
 	// 添加不存在的节点，版本号+1
+	//遍历传入的node列表
 	for _, n := range nodes {
+		//确保只更新本地域的节点的状态
 		if n.Region != region {
 			continue
 		}
+
+		//读取node现在的状态
 		nodeState := cs.nodeStates[n.Id]
+		//如果node现在的状态为空，则创建一个新的状态，直接赋值为新的状态
 		if nodeState == nil {
 			nodeState = NewNodeState(n, cs.version)
 			cs.nodeStates[n.Id] = nodeState
 		} else {
+			//更新node状态的版本
 			nodeState.version = cs.version
 			if nodeState.node.Fail != n.Fail {
 				log.Eventf(n.Addr(), "Fail state changed, %v -> %v", nodeState.node.Fail, n.Fail)

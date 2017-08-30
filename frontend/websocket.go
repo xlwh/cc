@@ -47,6 +47,8 @@ func logServer(ws *websocket.Conn) {
 }
 
 func RunWebsockServer(bindAddr string) {
+
+	//注册https路由
 	http.Handle("/node/state", websocket.Handler(nodeStateServer))
 	http.Handle("/migrate/state", websocket.Handler(migrateStateServer))
 	http.Handle("/rebalance/state", websocket.Handler(rebalanceStateServer))

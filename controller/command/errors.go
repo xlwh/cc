@@ -4,6 +4,7 @@ import (
 	"errors"
 )
 
+//异常和错误的定义
 var (
 	ErrNodeNotFree             = errors.New("this is not a free node")
 	ErrNodeIsFree              = errors.New("this is a free node")

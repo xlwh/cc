@@ -13,6 +13,7 @@ type ReplicateCommand struct {
 	ParentId string
 }
 
+//执行数据复制
 func (self *ReplicateCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	cs := c.ClusterState
 	child := cs.FindNode(self.ChildId)

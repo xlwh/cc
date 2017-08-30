@@ -14,6 +14,7 @@ import (
 	"github.com/ksarch-saas/cc/cli/context"
 )
 
+//可以支持执行cli命令
 var cmds = []cli.Command{
 	c.ChmodCommand,
 	c.FailoverCommand,
@@ -51,6 +52,7 @@ const (
 
 var cmdmap = map[string]cli.Command{}
 
+//初始化
 func init() {
 	for _, cmd := range cmds {
 		cmdmap[cmd.Name] = cmd

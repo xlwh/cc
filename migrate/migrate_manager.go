@@ -27,8 +27,8 @@ var (
 /// Migrate
 
 type MigrateManager struct {
-	tasks           []*MigrateTask
-	rebalanceTask   *RebalanceTask
+	tasks           []*MigrateTask //任务列表
+	rebalanceTask   *RebalanceTask //
 	lastTaskEndTime time.Time
 	mutex           *sync.Mutex
 }
@@ -47,12 +47,15 @@ func (m *MigrateManager) UnLockQ() {
 	m.mutex.Unlock()
 }
 
+//创建task
 func (m *MigrateManager) CreateTask(sourceId, targetId string, ranges []topo.Range, cluster *topo.Cluster) (*MigrateTask, error) {
 	sourceRS := cluster.FindReplicaSetByNode(sourceId)
 	targetRS := cluster.FindReplicaSetByNode(targetId)
 	if sourceRS == nil || targetRS == nil {
 		return nil, ErrReplicatSetNotFound
 	}
+
+	//创建task增加到task队列中去
 	task := NewMigrateTask(cluster, sourceRS, targetRS, ranges)
 	err := m.AddTask(task)
 	if err != nil {
@@ -84,6 +87,7 @@ func (m *MigrateManager) AppendTask(task *MigrateTask) error {
 	return nil
 }
 
+//检查和运行task
 func (m *MigrateManager) CheckAndRunTask() {
 	tickCh := time.NewTicker(time.Second * 5).C
 	for {

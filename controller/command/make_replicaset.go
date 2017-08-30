@@ -18,7 +18,9 @@ func (self *MakeReplicaSetCommand) Execute(c *cc.Controller) (cc.Result, error) 
 	cs := c.ClusterState
 
 	masterNodeId := ""
+	//服务的master所在的地域
 	masterRegion := meta.MasterRegion()
+	//所有的地域
 	regions := meta.AllRegions()
 
 	regionExist := map[string]bool{}
@@ -28,13 +30,16 @@ func (self *MakeReplicaSetCommand) Execute(c *cc.Controller) (cc.Result, error) 
 
 	// 检查节点状态
 	for _, nodeId := range self.NodeIds {
+		//搜索node
 		node := cs.FindNode(nodeId)
 		if node == nil {
 			return nil, ErrNodeNotExist
 		}
+		//节点挂的情况，打印一个日志
 		if node.Fail {
 			return nil, fmt.Errorf("Node %s has failed", nodeId)
 		}
+		//确定节点是主，设置主操作
 		if !node.IsMaster() {
 			return nil, fmt.Errorf("Node %s is not master, newly added node must be master.", nodeId)
 		}
@@ -60,6 +65,7 @@ func (self *MakeReplicaSetCommand) Execute(c *cc.Controller) (cc.Result, error) 
 		if nodeId == masterNodeId {
 			continue
 		}
+		//设置从
 		node := cs.FindNode(nodeId)
 		_, err := redis.ClusterReplicate(node.Addr(), masterNodeId)
 		if err != nil {

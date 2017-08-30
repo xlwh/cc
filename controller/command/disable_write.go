@@ -9,6 +9,7 @@ type DisableWriteCommand struct {
 	NodeId string
 }
 
+//和屏蔽读的逻辑一致
 func (self *DisableWriteCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	cs := c.ClusterState
 	target := cs.FindNode(self.NodeId)

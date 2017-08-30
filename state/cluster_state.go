@@ -79,6 +79,9 @@ func (cs *ClusterState) UpdateRegionNodes(region string, nodes []*topo.Node) {
 		} else {
 			//更新node状态的版本
 			nodeState.version = cs.version
+
+			//向Stream中发送不同状态变换的日志，新的状态和老的状态不匹配的时候发送
+			//考虑的是三种状态:Fail\Readable\Writeable
 			if nodeState.node.Fail != n.Fail {
 				log.Eventf(n.Addr(), "Fail state changed, %v -> %v", nodeState.node.Fail, n.Fail)
 			}
@@ -88,6 +91,7 @@ func (cs *ClusterState) UpdateRegionNodes(region string, nodes []*topo.Node) {
 			if nodeState.node.Writable != n.Writable {
 				log.Eventf(n.Addr(), "Writable state changed, %v -> %v", nodeState.node.Writable, n.Writable)
 			}
+			//更新node状态
 			nodeState.node = n
 		}
 		nodeState.updateTime = now
@@ -98,6 +102,7 @@ func (cs *ClusterState) UpdateRegionNodes(region string, nodes []*topo.Node) {
 		if n.node.Region != region {
 			continue
 		}
+		//遍历每个node，版本没有更新，就删除node
 		nodeState := cs.nodeStates[id]
 		if nodeState.version != cs.version {
 			log.Warningf("CLUSTER", "Delete node %s", nodeState.node)
@@ -106,19 +111,24 @@ func (cs *ClusterState) UpdateRegionNodes(region string, nodes []*topo.Node) {
 	}
 
 	// NB：低效？
+	//重新构建拓扑
 	cs.BuildClusterSnapshot()
 }
 
+//查询当前的集群的拓扑状态
 func (cs *ClusterState) GetClusterSnapshot() *topo.Cluster {
 	return cs.cluster
 }
 
+//构建拓扑
 func (cs *ClusterState) BuildClusterSnapshot() {
 	// __CC__没什么意义，跟Region区别开即可
 	cluster := topo.NewCluster("__CC__")
 	for _, ns := range cs.nodeStates {
 		cluster.AddNode(ns.node)
 	}
+
+	//设置cluster的主从关系
 	err := cluster.BuildReplicaSets()
 	// 出现这种情况，很可能是启动时节点还不全
 	if err != nil {
@@ -128,6 +138,7 @@ func (cs *ClusterState) BuildClusterSnapshot() {
 	cs.cluster = cluster
 }
 
+//根据节点id，查询节点
 func (cs *ClusterState) FindNode(nodeId string) *topo.Node {
 	ns := cs.FindNodeState(nodeId)
 	if ns == nil {
@@ -136,6 +147,7 @@ func (cs *ClusterState) FindNode(nodeId string) *topo.Node {
 	return ns.node
 }
 
+//根据节点id，查询节点现在的状态
 func (cs *ClusterState) FindNodeState(nodeId string) *NodeState {
 	return cs.nodeStates[nodeId]
 }
@@ -154,6 +166,7 @@ func (cs *ClusterState) DebugDump() {
 	}
 }
 
+//查找节点的从节点
 func (cs *ClusterState) FindReplicaSetByNode(nodeId string) *topo.ReplicaSet {
 	if cs.cluster != nil {
 		return cs.cluster.FindReplicaSetByNode(nodeId)
@@ -165,7 +178,9 @@ func (cs *ClusterState) FindReplicaSetByNode(nodeId string) *topo.ReplicaSet {
 /// helpers
 
 // 获取分片内主地域中ReplOffset最大的节点ID
+//master_repl_offset  全局的数据同步偏移量
 func (cs *ClusterState) MaxReploffSlibing(nodeId string, region string, slaveOnly bool) (string, error) {
+	//查找到node的ReplicaSet
 	rs := cs.FindReplicaSetByNode(nodeId)
 	if rs == nil {
 		return "", ErrNodeNotExist
@@ -192,13 +207,16 @@ func (cs *ClusterState) MaxReploffSlibing(nodeId string, region string, slaveOnl
 	return maxId, nil
 }
 
+//节点数据复制偏移量
 type reploff struct {
-	NodeId string
-	Offset int64
+	NodeId string //节点id
+	Offset int64  //offset
 }
 
 // 失败返回-1
+//从redis读取offset
 func fetchReplOffset(addr string) int64 {
+	//从redis中读取info
 	info, err := redis.FetchInfo(addr, "Replication")
 	if err != nil {
 		return -1
@@ -220,11 +238,14 @@ func fetchReplOffset(addr string) int64 {
 
 // 获取分片内ReplOffset节点，包括Master
 func (cs *ClusterState) FetchReplOffsetInReplicaSet(rs *topo.ReplicaSet) map[string]int64 {
+	//读取所有的node
 	nodes := rs.AllNodes()
 	c := make(chan reploff, len(nodes))
 
+	//遍历node
 	for _, node := range nodes {
 		go func(id, addr string) {
+			//从redis上读取offset
 			offset := fetchReplOffset(addr)
 			c <- reploff{id, offset}
 		}(node.Id, node.Addr())
@@ -238,30 +259,41 @@ func (cs *ClusterState) FetchReplOffsetInReplicaSet(rs *topo.ReplicaSet) map[str
 	return rmap
 }
 
+//执行故障迁移任务
 func (cs *ClusterState) RunFailoverTask(oldMasterId, newMasterId string) {
+	//新节点状态
 	new := cs.FindNodeState(newMasterId)
+	//老节点状态
 	old := cs.FindNodeState(oldMasterId)
 
+	//找不到老的节点就不再执行故障迁移
 	if old == nil {
 		log.Warningf(oldMasterId, "Can't run failover task, the old dead master lost")
 		return
 	}
+	//找不到新节点，也不执行故障迁移任务
 	if new == nil {
 		log.Warningf(oldMasterId, "Can't run failover task, new master lost (%s)", newMasterId)
+		//更新状态机：故障迁移结束
 		old.AdvanceFSM(cs, CMD_FAILOVER_END_SIGNAL)
 		return
 	}
 
-	// 通过新主广播消息
+	// 通过新主广播消息：屏蔽old的读写
 	redis.DisableRead(new.Addr(), old.Id())
 	redis.DisableWrite(new.Addr(), old.Id())
 
 	c := make(chan error, 1)
 
+	//单独的协程中执行从节点的迁移，主要是slot数据迁移
+	//迁移的结果写入到channel中
 	go func() {
 		//choose failover force or takeover in case of arbiter
 		cluster := cs.cluster
 		rs := cluster.FindReplicaSetByNode(old.Id())
+		//cluster有仲裁者或者集群没有down的情况下，执行从的数据迁移
+		//否则会执行强制数据迁移
+		//强制和费强制的区别?
 		if cluster.HasArbiter() || cluster.IsClusterDown() {
 			//use failover takeover
 			c <- redis.SetAsMasterWaitSyncDone(new.Addr(), true, true, rs)
@@ -271,6 +303,7 @@ func (cs *ClusterState) RunFailoverTask(oldMasterId, newMasterId string) {
 		}
 	}()
 
+	//处理迁移结果：写入到Stream中
 	select {
 	case err := <-c:
 		if err != nil {
@@ -283,6 +316,7 @@ func (cs *ClusterState) RunFailoverTask(oldMasterId, newMasterId string) {
 	}
 
 	// 重新读取一次，因为可能已经更新了
+	//先尝试看一下本地存储的状态是否已经更新了，如果没有更新，从Redis中读取一遍，会重试10次
 	roleChanged := false
 	node := cs.FindNode(newMasterId)
 	if node.IsMaster() {
@@ -301,6 +335,7 @@ func (cs *ClusterState) RunFailoverTask(oldMasterId, newMasterId string) {
 		}
 	}
 
+	//判断这次迁移是否成功，记录一些相应的日志，没有做实际的处理，需要人工介入处理
 	if roleChanged {
 		log.Eventf(old.Addr(), "New master %s(%s) role change success", node.Id, node.Addr())
 		// 处理迁移过程中的异常问题，将故障节点（旧主）的slots转移到新主上
@@ -317,9 +352,10 @@ func (cs *ClusterState) RunFailoverTask(oldMasterId, newMasterId string) {
 		log.Warningf(old.Addr(), "The dead master will goto OFFLINE state and then goto WAIT_FAILOVER_BEGIN state to try failover again.")
 	}
 
+	//更新状态机，迁移结束
 	old.AdvanceFSM(cs, CMD_FAILOVER_END_SIGNAL)
 
-	// 打开新主的写入，因为给slave加Write没有效果
+	// 广播打开新主的写入，因为给slave加Write没有效果
 	// 所以即便Failover失败，也不会产生错误
 	redis.EnableWrite(new.Addr(), new.Id())
 }

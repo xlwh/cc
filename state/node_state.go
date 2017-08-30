@@ -10,14 +10,16 @@ import (
 	"github.com/ksarch-saas/cc/topo"
 )
 
+//节点状态
 type NodeState struct {
 	node       *topo.Node        // 节点静态信息
 	updateTime time.Time         // 最近一次更新时间
 	version    int64             // 更新次数
-	fsm        *fsm.StateMachine // 节点状态机
-	mutex      *sync.Mutex
+	fsm        *fsm.StateMachine // 节点状态机，每个节点都有自己的状态机
+	mutex      *sync.Mutex       //节点锁
 }
 
+//创建一个新的对象，会新建一个状态机
 func NewNodeState(node *topo.Node, version int64) *NodeState {
 	ns := &NodeState{
 		version: version,
@@ -27,6 +29,8 @@ func NewNodeState(node *topo.Node, version int64) *NodeState {
 	}
 	return ns
 }
+
+//下面是节点的一些状态的读取
 
 func (ns *NodeState) Addr() string {
 	return ns.node.Addr()
@@ -60,6 +64,7 @@ func (ns *NodeState) Node() *topo.Node {
 	return ns.node
 }
 
+//help
 func (ns *NodeState) AdvanceFSM(cs *ClusterState, cmd InputField) error {
 	ns.mutex.Lock()
 	defer ns.mutex.Unlock()

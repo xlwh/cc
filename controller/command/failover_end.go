@@ -10,6 +10,7 @@ type FailoverEndCommand struct {
 	Done   bool
 }
 
+//更新状态机：故障迁移结束
 func (self *FailoverEndCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	cs := c.ClusterState
 	node := cs.FindNodeState(self.NodeId)

@@ -27,9 +27,9 @@ var (
 
 type Inspector struct {
 	mutex       *sync.RWMutex
-	LocalRegion string
+	LocalRegion string //当前地域
 	SeedIndex   int
-	ClusterTopo *topo.Cluster
+	ClusterTopo *topo.Cluster //集群拓扑
 }
 
 func NewInspector() *Inspector {
@@ -40,6 +40,7 @@ func NewInspector() *Inspector {
 	return sp
 }
 
+//读取数据重建node
 func (self *Inspector) buildNode(line string) (*topo.Node, bool, error) {
 	xs := strings.Split(line, " ")
 	mod, tag, id, addr, flags, parent := xs[0], xs[1], xs[2], xs[3], xs[4], xs[5]
@@ -112,6 +113,7 @@ func (self *Inspector) buildNode(line string) (*topo.Node, bool, error) {
 	return node, myself, nil
 }
 
+//增加节点
 func (self *Inspector) MeetNode(node *topo.Node) {
 	for _, seed := range meta.Seeds() {
 		if seed.Ip == node.Ip && seed.Port == node.Port {
@@ -124,6 +126,7 @@ func (self *Inspector) MeetNode(node *topo.Node) {
 	}
 }
 
+//根据一个node初始化集群
 func (self *Inspector) initClusterTopo(seed *topo.Node) (*topo.Cluster, error) {
 	resp, err := redis.ClusterNodesInRegion(seed.Addr(), self.LocalRegion)
 	if err != nil && strings.HasPrefix(err.Error(), "ERR Wrong CLUSTER subcommand or number of arguments") {

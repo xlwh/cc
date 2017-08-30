@@ -23,6 +23,7 @@ func (self *FixClusterCommand) Type() cc.CommandType {
 }
 
 func (self *FixClusterCommand) Execute(c *cc.Controller) (cc.Result, error) {
+	//这个方法最常用啦
 	cs := c.ClusterState
 	snapshot := cs.GetClusterSnapshot()
 	if snapshot == nil {
@@ -39,16 +40,19 @@ func (self *FixClusterCommand) Execute(c *cc.Controller) (cc.Result, error) {
 
 	totalNum := 0 //总节点数
 	totalRepli := 0
-	failedNodes := []*topo.Node{}
-	freeNodes := []*topo.Node{}
-	defectMaster := []*topo.Node{}
+	failedNodes := []*topo.Node{}  //挂掉的节点
+	freeNodes := []*topo.Node{}    //空闲的节点
+	defectMaster := []*topo.Node{} //存在问题的Master
 
+	//遍历ReplicaSets，找出Fail节点和Free节点
 	for _, rs := range rss {
 		//check failed nodes and free nodes
 		if rs.Master != nil && rs.Master.IsArbiter() {
 			continue
 		}
+		//更新totalNum
 		totalNum = totalNum + len(rs.AllNodes())
+		//range== 0 && state.StateRunning 这样的节点会被认为是Free节点
 		if len(rs.Master.Ranges) == 0 && nodeStates[rs.Master.Id] == state.StateRunning {
 			//free节点
 			freeNodes = append(freeNodes, rs.Master)
@@ -57,6 +61,7 @@ func (self *FixClusterCommand) Execute(c *cc.Controller) (cc.Result, error) {
 				totalRepli = totalRepli + 1
 			}
 			for _, node := range rs.AllNodes() {
+				//如果节点不在运行当中，则认为是Fail节点
 				if nodeStates[node.Id] != state.StateRunning {
 					failedNodes = append(failedNodes, node)
 				}
@@ -65,10 +70,12 @@ func (self *FixClusterCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	}
 
 	log.Infof("CLUSTER", "freeNodes=%d failedNodes=%d", len(freeNodes), len(failedNodes))
+	//没有找到空闲的和Fail的节点
 	if len(freeNodes) == 0 && len(failedNodes) == 0 {
 		return nil, nil
 	}
 
+	//如果Free节点的量和Fail节点不相等，则不执行Fix
 	if len(freeNodes) != len(failedNodes) ||
 		(totalNum-len(failedNodes))%(totalRepli) != 0 {
 		log.Infof("CLUSTER", "totalNum=%d totalRepli=%d freeNodes=%d failedNodes=%d",
@@ -85,6 +92,7 @@ func (self *FixClusterCommand) Execute(c *cc.Controller) (cc.Result, error) {
 		}
 		return false
 	}
+	//遍历rss
 	for _, rs := range rss {
 		if rs.Master != nil && rs.Master.IsArbiter() ||
 			nodeStates[rs.Master.Id] != state.StateRunning {

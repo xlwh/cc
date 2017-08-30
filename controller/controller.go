@@ -34,7 +34,9 @@ func NewController() *Controller {
 	return c
 }
 
+//命令执行
 func (c *Controller) ProcessCommand(command Command, timeout time.Duration) (result Result, err error) {
+	//两种命令:region和cluster要做区分判断
 	switch command.Type() {
 	case REGION_COMMAND:
 		if !meta.IsRegionLeader() {
@@ -67,6 +69,7 @@ func (c *Controller) ProcessCommand(command Command, timeout time.Duration) (res
 	//c.ClusterState.DebugDump()
 
 	go func() {
+		//执行命令，处理错误放到channel
 		result, err := command.Execute(c)
 		if err != nil {
 			errorCh <- err
@@ -75,6 +78,7 @@ func (c *Controller) ProcessCommand(command Command, timeout time.Duration) (res
 		}
 	}()
 
+	//处理channel中的数据
 	select {
 	case result = <-resultCh:
 	case err = <-errorCh:

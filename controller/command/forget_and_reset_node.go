@@ -8,8 +8,8 @@ import (
 	"github.com/ksarch-saas/cc/log"
 	"github.com/ksarch-saas/cc/meta"
 	"github.com/ksarch-saas/cc/redis"
-	"github.com/ksarch-saas/cc/topo"
 	"github.com/ksarch-saas/cc/state"
+	"github.com/ksarch-saas/cc/topo"
 )
 
 type ForgetAndResetNodeCommand struct {
@@ -43,12 +43,14 @@ func (self *ForgetAndResetNodeCommand) Execute(c *cc.Controller) (cc.Result, err
 			targetId := target.Id
 			node := ns.Node()
 			ret := 1
+			//发送命令
 			_, err = redis.ClusterForget(nodeState.Addr(), targetId)
 
 			if !node.Fail && err != nil && !strings.HasPrefix(err.Error(), "ERR Unknown node") {
 				allForgetDone = false
 				log.Warningf(target.Addr(), "Forget node %s(%s) failed, %v", ns.Addr(), ns.Id(), err)
 				ret = 0
+				//执行失败继续重试
 			} else if !node.Fail && err != nil {
 				//try again
 				for try := redis.NUM_RETRY; try >= 0; try-- {
@@ -64,11 +66,11 @@ func (self *ForgetAndResetNodeCommand) Execute(c *cc.Controller) (cc.Result, err
 					ret = 0
 				}
 			}
-			
+
 			if ret == 1 {
 				log.Eventf(target.Addr(), "Forget by %s(%s).", nodeState.Addr(), nodeState.Id())
 			}
-			
+
 			resChan <- ret
 		}(ns, target)
 

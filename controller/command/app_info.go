@@ -7,11 +7,13 @@ import (
 
 type AppInfoCommand struct{}
 
+//命令执行结果
 type AppInfoResult struct {
-	AppConfig *meta.AppConfig
-	Leader    *meta.ControllerConfig
+	AppConfig *meta.AppConfig        //app信息
+	Leader    *meta.ControllerConfig //leader信息
 }
 
+//从meta中读取信息返回
 func (self *AppInfoCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	result := &AppInfoResult{
 		AppConfig: meta.GetAppConfig(),

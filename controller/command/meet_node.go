@@ -23,6 +23,7 @@ func (self *MeetNodeCommand) Execute(c *cc.Controller) (cc.Result, error) {
 		return nil, ErrNodeNotFree
 	}
 	var err error
+	//广播新节点加入
 	for _, ns := range cs.AllNodeStates() {
 		_, err = redis.ClusterMeet(ns.Addr(), target.Ip, target.Port)
 		if err == nil {

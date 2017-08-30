@@ -7,9 +7,9 @@ import (
 )
 
 type MigrateCommand struct {
-	SourceId string
-	TargetId string
-	Ranges   []topo.Range
+	SourceId string       //源id
+	TargetId string       //目标id
+	Ranges   []topo.Range //range
 }
 
 func (self *MigrateCommand) Execute(c *cc.Controller) (cc.Result, error) {
@@ -17,6 +17,7 @@ func (self *MigrateCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	cluster := cs.GetClusterSnapshot()
 	if cluster != nil {
 		mm := c.MigrateManager
+		//创建迁移计划
 		_, err := mm.CreateTask(self.SourceId, self.TargetId, self.Ranges, cluster)
 		if err != nil {
 			return nil, err
@@ -31,12 +32,14 @@ type MigratePauseCommand struct {
 	SourceId string
 }
 
+//可以暂停迁移
 func (self *MigratePauseCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	mm := c.MigrateManager
 	task := mm.FindTaskBySource(self.SourceId)
 	if task == nil {
 		return nil, ErrMigrateTaskNotExist
 	}
+	//更新一下任务状态
 	task.SetState(migrate.StatePausing)
 	return nil, nil
 }

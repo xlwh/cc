@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	NUMRETRY       = 3
+	NUMRETRY       = 3 //重试次数
 	StateNew int32 = iota
 	StateRunning
 	StatePausing
@@ -25,6 +25,7 @@ const (
 	StateTargetNodeFailure
 )
 
+//状态描述
 var stateNames = map[int32]string{
 	StateNew:               "New",
 	StateRunning:           "Migrating",
@@ -36,28 +37,31 @@ var stateNames = map[int32]string{
 	StateTargetNodeFailure: "TargetNodeFailure",
 }
 
+//迁移计划定义
 type MigratePlan struct {
-	SourceId string
-	TargetId string
-	Ranges   []topo.Range
-	CurrSlot int
-	State    string
-	task     *MigrateTask
+	SourceId string       //源id
+	TargetId string       //目标id
+	Ranges   []topo.Range //slot的range
+	CurrSlot int          //当前的slot
+	State    string       //迁移状态
+	task     *MigrateTask //迁移任务
 }
 
+//迁移任务
 type MigrateTask struct {
-	cluster          *topo.Cluster
-	ranges           []topo.Range
-	source           atomic.Value
-	target           atomic.Value
-	currRangeIndex   int // current range index
-	currSlot         int // current slot
+	cluster          *topo.Cluster //集群
+	ranges           []topo.Range  //slot的range
+	source           atomic.Value  //源id
+	target           atomic.Value  //目标id
+	currRangeIndex   int           // current range index
+	currSlot         int           // current slot
 	state            int32
 	backupReplicaSet *topo.ReplicaSet
-	lastPubTime      time.Time
-	totalKeysInSlot  int // counter of total keys migrated
+	lastPubTime      time.Time //最近一次广播时间
+	totalKeysInSlot  int       // counter of total keys migrated
 }
 
+//新增一个迁移计划
 func NewMigrateTask(cluster *topo.Cluster, sourceRS, targetRS *topo.ReplicaSet, ranges []topo.Range) *MigrateTask {
 	t := &MigrateTask{
 		cluster:     cluster,
@@ -70,6 +74,7 @@ func NewMigrateTask(cluster *topo.Cluster, sourceRS, targetRS *topo.ReplicaSet, 
 	return t
 }
 
+//TaskName查询
 func (t *MigrateTask) TaskName() string {
 	return fmt.Sprintf("Mig(%s_To_%s)", t.SourceNode().Id[:6], t.TargetNode().Id[:6])
 }
@@ -96,7 +101,7 @@ func (t *MigrateTask) ToMeta() *meta.MigrateMeta {
 /// 迁移slot过程:
 /// 1. 标记Target分片Master为IMPORTING
 /// 2. 标记所有Source分片节点为MIGRATING
-/// 3. 从Source分片Master取keys迁移，直到空，数据迁移完成
+/// 3. 从Source分片Master取keys迁移，直到空，数据迁移完成(get -> set)
 /// 4. 设置Target的Slave的slot归属到Target
 /// 5. 设置Target的Master的slot归属到Target
 /// 6. 设置Source所有节点的slot归属到Target
@@ -110,11 +115,16 @@ func (t *MigrateTask) ToMeta() *meta.MigrateMeta {
 /// 6. <Source Slaves> setslot $slot node $targetId
 /// 7. <Source Master> setslot $slot node $targetId
 func (t *MigrateTask) migrateSlot(slot int, keysPer int) (int, error, string) {
+	//源地址的主从关系
 	rs := t.SourceReplicaSet()
+	//源节点
 	sourceNode := t.SourceNode()
+	//目标节点
 	targetNode := t.TargetNode()
 
+	//1. 标记Target分片Master为IMPORTING
 	err := redis.SetSlot(targetNode.Addr(), slot, redis.SLOT_IMPORTING, sourceNode.Id)
+	//标记异常处理
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "ERR I'm already the owner of hash slot") {
 			log.Warningf(t.TaskName(), "%s already the owner of hash slot %d",
@@ -141,7 +151,7 @@ func (t *MigrateTask) migrateSlot(slot int, keysPer int) (int, error, string) {
 		return 0, err, ""
 	}
 
-	// 需要将Source分片的所有节点标记为MIGRATING，最大限度避免从地域的读造成的数据不一致
+	// 2.需要将Source分片的所有节点标记为MIGRATING，最大限度避免从地域的读造成的数据不一致
 	for _, node := range rs.AllNodes() {
 		err := redis.SetSlot(node.Addr(), slot, redis.SLOT_MIGRATING, targetNode.Id)
 		if err != nil {
@@ -174,6 +184,8 @@ func (t *MigrateTask) migrateSlot(slot int, keysPer int) (int, error, string) {
 	if migratekeystep > 0 {
 		suportmultikeys = true
 	}
+
+	//3. 从Source分片Master取keys迁移，直到空，数据迁移完成(get -> set)
 	for {
 		keys, err := redis.GetKeysInSlot(sourceNode.Addr(), slot, keysPer)
 		if err != nil {
@@ -264,6 +276,7 @@ func (t *MigrateTask) migrateSlot(slot int, keysPer int) (int, error, string) {
 	return nkeys, nil, ""
 }
 
+//向stream中发布数据
 func (t *MigrateTask) streamPub(careSpeed bool) {
 	data := &streams.MigrateStateStreamData{
 		SourceId:       t.SourceNode().Id,
@@ -284,12 +297,15 @@ func (t *MigrateTask) streamPub(careSpeed bool) {
 	}
 }
 
+//执行故障迁移命令,分别对每个slot执行迁移
 func (t *MigrateTask) Run() {
+	//设置状态为Running
 	if t.CurrentState() == StateNew {
 		t.SetState(StateRunning)
 	}
 	prev_key := ""
 	timeout_cnt := 0
+	//遍历range
 	for i, r := range t.ranges {
 		if t.CurrentState() == StateCancelling {
 			t.SetState(StateCancelled)

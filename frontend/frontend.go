@@ -20,7 +20,7 @@ type FrontEnd struct {
 	Router         *gin.Engine
 	HttpBindAddr   string
 	WsBindAddr     string
-	ProcessTimeout time.Duration
+	ProcessTimeout time.Duration //处理请求的超时设置
 }
 
 func NewFrontEnd(c *cc.Controller, httpPort, wsPort int) *FrontEnd {
@@ -37,6 +37,7 @@ func NewFrontEnd(c *cc.Controller, httpPort, wsPort int) *FrontEnd {
 	store := auth.NewTokenStore("r3")
 	tokenAuth := auth.NewTokenAuth(nil, store, nil)
 
+	//注册http路由
 	fe.Router.Static("/ui", "./public")
 	fe.Router.GET(api.AppInfoPath, fe.HandleAppInfo)
 	fe.Router.GET(api.AppStatusPath, fe.HandleAppStatus)

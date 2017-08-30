@@ -12,6 +12,7 @@ type MergeSeedsCommand struct {
 	Seeds  []*topo.Node
 }
 
+//更新seeds
 func (self *MergeSeedsCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	if meta.LocalRegion() == self.Region {
 		meta.MergeSeeds(self.Seeds)

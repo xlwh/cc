@@ -11,6 +11,7 @@ type FetchMigrationTasksResult struct {
 	Plans []*migrate.MigratePlan
 }
 
+//读取故障迁移task
 func (self *FetchMigrationTasksCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	mm := c.MigrateManager
 	tasks := mm.AllTasks()

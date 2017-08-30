@@ -24,18 +24,20 @@ var (
 )
 
 const (
-	SLOT_MIGRATING = "MIGRATING"
-	SLOT_IMPORTING = "IMPORTING"
+	SLOT_MIGRATING = "MIGRATING" //slot迁出
+	SLOT_IMPORTING = "IMPORTING" //data迁入
 	SLOT_STABLE    = "STABLE"
 	SLOT_NODE      = "NODE"
 
-	NUM_RETRY     = 3
+	NUM_RETRY     = 3 //重试次数
 	CONN_TIMEOUT  = 5 * time.Second
-	READ_TIMEOUT  = 120 * time.Second
-	WRITE_TIMEOUT = 120 * time.Second
+	READ_TIMEOUT  = 120 * time.Second //读超时
+	WRITE_TIMEOUT = 120 * time.Second //写超时
 )
 
+//连接redis，如果不在连接池中，重新连接，如果在连接池中，则直接获取连接池中的
 func dial(addr string) (redis.Conn, error) {
+	//初始化连接池
 	if poolMap == nil {
 		poolMap = make(map[string]*redis.Pool)
 	}
@@ -44,9 +46,11 @@ func dial(addr string) (redis.Conn, error) {
 	}
 
 	inner := func(addr string) (redis.Conn, error) {
+		//连接池加锁
 		poolMutex.RLock()
 		_, ok := poolMap[addr]
 		poolMutex.RUnlock()
+		//节点不在连接池中才处理
 		if !ok {
 			//not exist in map
 			poolMutex.Lock()
@@ -60,6 +64,7 @@ func dial(addr string) (redis.Conn, error) {
 					}
 					return c, nil
 				},
+				//连接上后会ping一下节点，检查是不是正常的节点
 				TestOnBorrow: func(c redis.Conn, t time.Time) error {
 					_, err := c.Do("PING")
 					return err
@@ -85,6 +90,7 @@ func dial(addr string) (redis.Conn, error) {
 
 /// Misc
 
+//判断redis是否还是活着的
 func IsAlive(addr string) bool {
 	conn, err := dial(addr)
 	if err != nil {
@@ -99,6 +105,7 @@ func IsAlive(addr string) bool {
 }
 
 /// Cluster
+//指定redis节点，进行数据的复制
 func ReplicateTarget(addr string, targetId string) error {
 	conn, err := dial(addr)
 	if err != nil {
@@ -109,6 +116,7 @@ func ReplicateTarget(addr string, targetId string) error {
 	return err
 }
 
+//将一个节点设置为Master
 func SetAsMasterWaitSyncDone(addr string, waitSyncDone bool, takeover bool, rs *topo.ReplicaSet) error {
 	conn, err := dial(addr)
 	if err != nil {
@@ -116,6 +124,7 @@ func SetAsMasterWaitSyncDone(addr string, waitSyncDone bool, takeover bool, rs *
 	}
 	defer conn.Close()
 
+	//广播数据迁移
 	//change failover force to failover takeover, in case of arbiter vote
 	if takeover {
 		_, err = redis.String(conn.Do("cluster", "failover", "takeover"))
@@ -131,8 +140,10 @@ func SetAsMasterWaitSyncDone(addr string, waitSyncDone bool, takeover bool, rs *
 		return nil
 	}
 
+	//一直抓取info，判断数据是否迁移完成
 	for {
 		info, err := FetchInfo(addr, "replication")
+		//5s重试一次
 		time.Sleep(5 * time.Second)
 		if err == nil {
 			n, err := info.GetInt64("connected_slaves")
@@ -154,6 +165,7 @@ func SetAsMasterWaitSyncDone(addr string, waitSyncDone bool, takeover bool, rs *
 	return nil
 }
 
+//从redis cluster上读取所有的node
 func ClusterNodes(addr string) (string, error) {
 	inner := func(addr string) (string, error) {
 		conn, err := dial(addr)
@@ -168,6 +180,7 @@ func ClusterNodes(addr string) (string, error) {
 		}
 		return resp, nil
 	}
+	//指定重试次数进行重试
 	retry := NUM_RETRY
 	var err error
 	var resp string
@@ -181,6 +194,7 @@ func ClusterNodes(addr string) (string, error) {
 	return "", err
 }
 
+//读取当前地域的node
 func ClusterNodesInRegion(addr string, region string) (string, error) {
 	inner := func(addr string, region string) (string, error) {
 		conn, err := dial(addr)
@@ -208,6 +222,7 @@ func ClusterNodesInRegion(addr string, region string) (string, error) {
 	return "", err
 }
 
+//读取redis上记录的info
 func FetchClusterInfo(addr string) (topo.ClusterInfo, error) {
 	clusterInfo := topo.ClusterInfo{}
 	conn, err := dial(addr)
@@ -265,6 +280,7 @@ func FetchClusterInfo(addr string) (topo.ClusterInfo, error) {
 	return clusterInfo, nil
 }
 
+//执行chmod命令
 func ClusterChmod(addr, id, op string) (string, error) {
 	inner := func(addr, id, op string) (string, error) {
 		conn, err := dial(addr)
@@ -292,22 +308,27 @@ func ClusterChmod(addr, id, op string) (string, error) {
 	return "", err
 }
 
+//设置节点不可读
 func DisableRead(addr, id string) (string, error) {
 	return ClusterChmod(addr, id, "-r")
 }
 
+//设置节点可读
 func EnableRead(addr, id string) (string, error) {
 	return ClusterChmod(addr, id, "+r")
 }
 
+//设置节点不可写
 func DisableWrite(addr, id string) (string, error) {
 	return ClusterChmod(addr, id, "-w")
 }
 
+//设置节点可写
 func EnableWrite(addr, id string) (string, error) {
 	return ClusterChmod(addr, id, "+w")
 }
 
+//执行集群故障迁移
 func ClusterFailover(addr string, rs *topo.ReplicaSet) (string, error) {
 	conn, err := dial(addr)
 	if err != nil {
@@ -326,7 +347,7 @@ func ClusterFailover(addr string, rs *topo.ReplicaSet) (string, error) {
 		}
 	}
 
-	// 30s
+	// 拉取info判断故障迁移结果
 	for i := 0; i < 30; i++ {
 		info, err := FetchInfo(addr, "Replication")
 		if err != nil {
@@ -341,6 +362,7 @@ func ClusterFailover(addr string, rs *topo.ReplicaSet) (string, error) {
 	return resp, nil
 }
 
+//故障恢复
 func ClusterTakeover(addr string, rs *topo.ReplicaSet) (string, error) {
 	conn, err := dial(addr)
 	if err != nil {
@@ -348,6 +370,7 @@ func ClusterTakeover(addr string, rs *topo.ReplicaSet) (string, error) {
 	}
 	defer conn.Close()
 
+	//发送takeover命令
 	resp, err := redis.String(conn.Do("cluster", "failover", "takeover"))
 	if err != nil {
 		return "", err
@@ -368,6 +391,7 @@ func ClusterTakeover(addr string, rs *topo.ReplicaSet) (string, error) {
 	return resp, nil
 }
 
+//数据复制
 func ClusterReplicate(addr, targetId string) (string, error) {
 	conn, err := dial(addr)
 	if err != nil {
@@ -383,6 +407,7 @@ func ClusterReplicate(addr, targetId string) (string, error) {
 	return resp, nil
 }
 
+//广播新节点加入消息
 func ClusterMeet(seedAddr, newIp string, newPort int) (string, error) {
 	conn, err := dial(seedAddr)
 	if err != nil {
@@ -398,6 +423,7 @@ func ClusterMeet(seedAddr, newIp string, newPort int) (string, error) {
 	return resp, nil
 }
 
+//屏蔽节点
 func ClusterForget(seedAddr, nodeId string) (string, error) {
 	conn, err := dial(seedAddr)
 	if err != nil {
@@ -413,6 +439,7 @@ func ClusterForget(seedAddr, nodeId string) (string, error) {
 	return resp, nil
 }
 
+//reset
 func ClusterReset(addr string, hard bool) (string, error) {
 	conn, err := dial(addr)
 	if err != nil {
@@ -425,7 +452,7 @@ func ClusterReset(addr string, hard bool) (string, error) {
 		flag = "hard"
 	}
 
-	resp, err := redis.String(conn.Do("cluster", "reset", flag))
+	resp, err := redis.String(conn.Do("cluster", "", flag))
 	if err != nil {
 		return "", err
 	}
@@ -595,13 +622,13 @@ func MigrateByMultiKeys(addr, toIp string, toPort int, key []string, timeout int
 		if len(key) == 0 {
 			return "", nil
 		}
- 		conn, err := dial(addr)
+		conn, err := dial(addr)
 		if err != nil {
 			return "", ErrConnFailed
 		}
 		defer conn.Close()
 
-		_joinArgs := func(toIp string, toPort int, keys []string, timeout int, replace bool) ([]interface{}){
+		_joinArgs := func(toIp string, toPort int, keys []string, timeout int, replace bool) []interface{} {
 			var args []interface{}
 			args = append(args, toIp)
 			args = append(args, toPort)
@@ -714,7 +741,7 @@ func Slot2Node(addr string, slot int, dest string) (string, error) {
 	return resp, nil
 }
 
-//Raw
+//执行cli命令
 func RedisCli(addr string, cmd string, args ...interface{}) (interface{}, error) {
 	conn, err := dial(addr)
 	if err != nil {

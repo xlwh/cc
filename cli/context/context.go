@@ -35,13 +35,14 @@ var (
 	Config                  *CliConf
 )
 
+//cli的配置
 type CliConf struct {
-	Zkhosts     string `yaml:"zkhosts,omitempty"`
+	Zkhosts     string `yaml:"zkhosts,omitempty"` //zk地址
 	HistoryFile string `yaml:"historyfile,omitempty"`
 	Display     string `yaml:"display,omitempty"`
-	User        string `yaml:"user,omitempty"`
-	Role        string `yaml:"role,omitempty"`
-	Token       string `yaml:"token,omitempty"`
+	User        string `yaml:"user,omitempty"`  //用户名
+	Role        string `yaml:"role,omitempty"`  //角色
+	Token       string `yaml:"token,omitempty"` //token
 }
 
 func GetAppName() string {
@@ -109,6 +110,7 @@ func SetApp(appName string, zkAddr string) error {
 	return err
 }
 
+//新增app,在zk中注册
 func AddApp(appName string, config []byte) error {
 	zconn, _, err := meta.DialZk(ZkAddr)
 	defer func() {

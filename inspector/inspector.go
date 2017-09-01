@@ -128,7 +128,10 @@ func (self *Inspector) MeetNode(node *topo.Node) {
 
 //根据一个node初始化集群
 func (self *Inspector) initClusterTopo(seed *topo.Node) (*topo.Cluster, error) {
+
+	//使用参考的node获取本地域的Node
 	resp, err := redis.ClusterNodesInRegion(seed.Addr(), self.LocalRegion)
+	//兼容原生的redis
 	if err != nil && strings.HasPrefix(err.Error(), "ERR Wrong CLUSTER subcommand or number of arguments") {
 		//server version do not support 'cluster nodes extra [region]'
 		resp, err = redis.ClusterNodes(seed.Addr())
@@ -137,6 +140,7 @@ func (self *Inspector) initClusterTopo(seed *topo.Node) (*topo.Cluster, error) {
 		return nil, err
 	}
 
+	//新建cluster
 	cluster := topo.NewCluster(self.LocalRegion)
 
 	var summary topo.SummaryInfo
@@ -145,6 +149,8 @@ func (self *Inspector) initClusterTopo(seed *topo.Node) (*topo.Cluster, error) {
 
 	lines := strings.Split(resp, "\n")
 	cnt = 0
+
+	//解析从参考节点上读取到的信息
 	for _, line := range lines {
 		if strings.HasPrefix(line, "# ") {
 			summary.ReadLine(line)
@@ -154,6 +160,8 @@ func (self *Inspector) initClusterTopo(seed *topo.Node) (*topo.Cluster, error) {
 		if line == "" {
 			continue
 		}
+
+		//按照读取到的信息，初始化node
 		node, myself, err := self.buildNode(line)
 		if err == ErrNodeInHandShake || err == ErrNodeNoAddr {
 			continue
@@ -325,15 +333,19 @@ func (self *Inspector) checkClusterTopo(seed *topo.Node, cluster *topo.Cluster) 
 	return nil
 }
 
-// 生成ClusterSnapshot
+//生成ClusterSnapshot
+//返回cluster和node
 func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
+	//需要加锁
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
+
+	//meta中的记录为空，则不进行处理，需要从meta中读取
 	if len(meta.Seeds()) == 0 {
 		return nil, nil, ErrNoSeed
 	}
 
-	// 过滤掉连接不上的节点
+	// 过滤掉连接不上的节点，只保留一个好的节点
 	seeds := []*topo.Node{}
 	for _, s := range meta.Seeds() {
 		if redis.IsAlive(s.Addr()) {
@@ -345,6 +357,8 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 		}
 	}
 
+	//seed为空，没有活着的节点？
+	//TDO: 可以记录一条日志
 	if len(seeds) == 0 {
 		return nil, seeds, ErrNoSeed
 	}
@@ -354,16 +368,24 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 		self.SeedIndex = len(seeds) - 1
 	}
 	var seed *topo.Node
+	//遍历活着的node，进行处理
 	for i := 0; i < len(seeds); i++ {
+		//随机取出一个node
 		seed = seeds[self.SeedIndex]
+
+		//换一下Index，决定下一次的index，保证可以随机，可以换rand算法吧？
 		self.SeedIndex++
 		self.SeedIndex %= len(seeds)
+
+		//如果节点是非线上的节点，需要换一个
 		if seed.Free {
 			glog.Info("Seed node is free ", seed.Addr())
 		} else {
 			break
 		}
 	}
+
+	//找到一个参考的node，去同步其他的node的状态，返回一个重建好的cluster
 	cluster, err := self.initClusterTopo(seed)
 	if err != nil {
 		glog.Infof("InitClusterTopo failed")
@@ -393,8 +415,10 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 		}
 	}
 
-	// 构造LocalRegion视图
+	// 遍历本地的所有node，构造LocalRegion视图
 	for _, s := range cluster.LocalRegionNodes() {
+
+		//节点被超过一半以上的node投票，则记录日志，设置节点为Fail
 		if s.PFailCount() > cluster.NumLocalRegionNode()/2 {
 			glog.Infof("Found %d/%d PFAIL state on %s, set FAIL",
 				s.PFailCount(), cluster.NumLocalRegionNode(), s.Addr())
@@ -402,6 +426,7 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 		}
 	}
 
+	//所有地域的主才有权限构建主从
 	if meta.IsClusterLeader() {
 		cluster.BuildReplicaSets()
 	}
@@ -409,5 +434,6 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 	//更新本地记录的node列表
 	meta.MergeSeeds(cluster.LocalRegionNodes())
 	self.ClusterTopo = cluster
+
 	return cluster, seeds, nil
 }

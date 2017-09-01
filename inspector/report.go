@@ -19,10 +19,10 @@ func MkUrl(path string) string {
 //把本地的node信息同步给cluster controller
 func SendRegionTopoSnapshot(nodes []*topo.Node, failureInfo *topo.FailureInfo) error {
 	params := &api.RegionSnapshotParams{
-		Region:      meta.LocalRegion(),
-		PostTime:    time.Now().Unix(),
-		Nodes:       nodes,
-		FailureInfo: failureInfo,
+		Region:      meta.LocalRegion(), //来源地域
+		PostTime:    time.Now().Unix(),  //发送时间
+		Nodes:       nodes,              //节点列表
+		FailureInfo: failureInfo,        //挂了的节点信息
 	}
 
 	//超时时间设定了30 ms
@@ -113,6 +113,7 @@ func (self *Inspector) Run() {
 	//周期性修复
 	go FixClusterCircle()
 	appconfig := meta.GetAppConfig()
+
 	// FetchClusterNodesInterval not support heat loading
 	//定时器，定时运行任务
 	tickChan := time.NewTicker(appconfig.FetchClusterNodesInterval).C
@@ -123,11 +124,15 @@ func (self *Inspector) Run() {
 			if !meta.IsRegionLeader() {
 				continue
 			}
-			//和redis交互，拉取拓扑
+
+			//和redis交互，拉取拓扑，更新本地的拓扑，会把Fail的节点去掉
 			cluster, seeds, err := self.BuildClusterTopo()
 			if err != nil {
 				glog.Infof("build cluster topo failed, %v", err)
 			}
+
+			//没有拉取到拓扑，本次不更新
+			//这里可以记录日志
 			if cluster == nil {
 				continue
 			}
@@ -136,8 +141,10 @@ func (self *Inspector) Run() {
 			var failureInfo *topo.FailureInfo
 			//controller在主地域并且集群都挂了的情况，记录Fail，发送给cluster leader
 			if meta.IsInMasterRegion() && self.IsClusterDamaged(cluster, seeds) {
+				//把这个集群内的所有的node都放到FailInfo里面发出去
 				failureInfo = &topo.FailureInfo{Seeds: seeds}
 			}
+			//更新Node
 			var nodes []*topo.Node
 			if err == nil {
 				nodes = cluster.LocalRegionNodes()

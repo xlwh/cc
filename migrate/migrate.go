@@ -298,6 +298,8 @@ func (t *MigrateTask) streamPub(careSpeed bool) {
 }
 
 //执行故障迁移命令,分别对每个slot执行迁移
+//在故障管理器里面启动这个任务
+//把数据迁移出
 func (t *MigrateTask) Run() {
 	//设置状态为Running
 	if t.CurrentState() == StateNew {
@@ -305,15 +307,18 @@ func (t *MigrateTask) Run() {
 	}
 	prev_key := ""
 	timeout_cnt := 0
-	//遍历range
+	//遍历range，处理slot
 	for i, r := range t.ranges {
+		//如果任务被取消执行，则不进行了
 		if t.CurrentState() == StateCancelling {
 			t.SetState(StateCancelled)
 			return
 		}
+		//slot left设置
 		if r.Left < 0 {
 			r.Left = 0
 		}
+		//sloat 设置上限
 		if r.Right > 16383 {
 			r.Right = 16383
 		}
@@ -341,6 +346,7 @@ func (t *MigrateTask) Run() {
 
 			// 正常运行
 			app := meta.GetAppConfig()
+			//迁移slot中的数据
 			nkeys, err, key := t.migrateSlot(t.currSlot, app.MigrateKeysEachTime)
 
 			t.totalKeysInSlot += nkeys
@@ -381,6 +387,7 @@ func (t *MigrateTask) Run() {
 				}
 				time.Sleep(500 * time.Millisecond)
 			} else {
+				//数据迁移结束
 				log.Infof(t.TaskName(), "Migrate slot %d done, %d keys done, total %d keys, remains %d keys",
 					t.currSlot, nkeys, t.totalKeysInSlot, remains)
 				t.currSlot++

@@ -14,6 +14,7 @@ type UpdateRegionCommand struct {
 	Nodes  []*topo.Node
 }
 
+//【==========================核心方法=======================】
 //更新状态机，广播摘除故障实例
 //只是屏蔽读写，没有进行迁移
 func (self *UpdateRegionCommand) Execute(c *cc.Controller) (cc.Result, error) {
@@ -23,15 +24,20 @@ func (self *UpdateRegionCommand) Execute(c *cc.Controller) (cc.Result, error) {
 
 	// 更新Cluster拓扑
 	cs := c.ClusterState
+
+	//更新本地域所有节点的状态
 	cs.UpdateRegionNodes(self.Region, self.Nodes)
 
 	// 首先更新迁移任务状态，以便发现故障时，在处理故障之前就暂停迁移任务
+	//主要的任务就是建立起数据迁移任务
+	//Step1 进行数据迁移
 	cluster := cs.GetClusterSnapshot()
 	if cluster != nil {
 		mm := c.MigrateManager
 		mm.HandleNodeStateChange(cluster)
 	}
 
+	//Step2 屏蔽读或者写
 	for _, ns := range cs.AllNodeStates() {
 		node := ns.Node()
 		// Slave auto enable read ?

@@ -22,9 +22,10 @@ var (
 type Controller struct {
 	mutex          sync.Mutex
 	ClusterState   *state.ClusterState
-	MigrateManager *migrate.MigrateManager
+	MigrateManager *migrate.MigrateManager //任务管理器
 }
 
+//controller启动
 func NewController() *Controller {
 	c := &Controller{
 		MigrateManager: migrate.NewMigrateManager(),
@@ -36,6 +37,7 @@ func NewController() *Controller {
 
 //命令执行
 func (c *Controller) ProcessCommand(command Command, timeout time.Duration) (result Result, err error) {
+
 	//两种命令:region和cluster要做区分判断
 	switch command.Type() {
 	case REGION_COMMAND:
@@ -67,7 +69,7 @@ func (c *Controller) ProcessCommand(command Command, timeout time.Duration) (res
 	errorCh := make(chan error)
 
 	//c.ClusterState.DebugDump()
-
+	//在后台执行命令处理
 	go func() {
 		//执行命令，处理错误放到channel
 		result, err := command.Execute(c)
@@ -85,6 +87,8 @@ func (c *Controller) ProcessCommand(command Command, timeout time.Duration) (res
 	case <-time.After(timeout):
 		err = ErrProcessCommandTimedout
 	}
+
+	//记录一下处理的命令
 	if commandName != "" {
 		log.Infof("OP", "Command: %s, Event:End", commandName)
 	}

@@ -104,7 +104,9 @@ func (m *MigrateManager) CheckAndRunTask() {
 					glog.Info("Set task running ", task)
 
 					// update task state in case of next loop state check
+					//更新状态机
 					task.SetState(StateRunning)
+					//运行迁移任务
 					go task.Run()
 				} else if task.CurrentState() == StateDone || task.CurrentState() == StateCancelled {
 					glog.Info("Remove task when task is done or be cancelled", task)
@@ -239,24 +241,33 @@ func (m *MigrateManager) handleTaskChange(task *MigrateTask, cluster *topo.Clust
 	return nil
 }
 
+//处理节点状态改变，进行故障迁移等事情
+//只允许一个任务在运行
 func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 	// 如果存在迁移任务，先跳过，等结束后再处理
 	if len(m.tasks) > 0 {
 		goto done
 	}
 
-	// 处理主节点的迁移任务重建
+	// 遍历新的拓扑处理主节点的迁移任务重建
 	for _, node := range cluster.AllNodes() {
+		//Fail的节点不处理
+		//这里可以记录一条日志?
 		if node.Fail {
 			continue
 		}
+
 		// Wait a while
+		//距离上一次迁移任务少于5ms暂时不处理
 		if time.Now().Sub(m.lastTaskEndTime) < 5*time.Second {
 			continue
 		}
+
+		//处理数据迁移出:遍历取出待迁移的nodeid:slot
 		for id, slots := range node.Migrating {
 			// 根据slot生成ranges
 			ranges := []topo.Range{}
+			//遍历节点上的slot,读取等待迁移的slot
 			for _, slot := range slots {
 				// 如果是自己
 				if id == node.Id {
@@ -265,21 +276,29 @@ func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 					ranges = append(ranges, topo.Range{Left: slot, Right: slot})
 				}
 			}
-			// Source
+
+			// Source  优先是从Master上处理
 			source := node
 			if !node.IsMaster() {
 				srs := cluster.FindReplicaSetByNode(node.Id)
 				if srs != nil {
+					//找到这个节点的主
 					source = srs.Master
 				}
 			}
+
 			// Target
 			rs := cluster.FindReplicaSetByNode(id)
+
+			//如果source已经挂了，那这份数据就没法迁移了?
+			//这里记录一个日志
 			if source.Fail || rs.Master.Fail {
 				continue
 			}
 
+			//创建一个数据迁移任务
 			_, err := m.CreateTask(source.Id, rs.Master.Id, ranges, cluster)
+			//记录日志
 			if err != nil {
 				log.Warningf(node.Addr(), "Can not recover migrate task, %v", err)
 			} else {
@@ -288,6 +307,8 @@ func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 				goto done
 			}
 		}
+
+		//处理数据迁入
 		for id, slots := range node.Importing {
 			// 根据slot生成ranges
 			ranges := []topo.Range{}
@@ -319,6 +340,8 @@ func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 			if target.Fail || rs.Master.Fail {
 				continue
 			}
+
+			//创建数据迁移命令
 			_, err := m.CreateTask(rs.Master.Id, target.Id, ranges, cluster)
 			if err != nil {
 				log.Warningf(node.Addr(), "Can not recover migrate task, %v", err)
@@ -332,6 +355,7 @@ func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 
 done:
 	for _, task := range m.tasks {
+		//没有处理完成，继续重试
 		if task.CurrentState() != StateDone {
 			m.handleTaskChange(task, cluster)
 		}

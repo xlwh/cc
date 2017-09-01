@@ -10,6 +10,7 @@ type Response struct {
 	Body   interface{} `json:"body"`
 }
 
+//返回响应数据
 func MakeResponse(errno int, msg string, body interface{}) Response {
 	return Response{errno, msg, body}
 }
@@ -24,8 +25,9 @@ func MakeFailureResponse(msg string) Response {
 
 type MapResp map[string]interface{}
 
+//controller同步的消息的定义
 type RegionSnapshotParams struct {
-	Region      string            `json:"region"`
+	Region      string            `json:"region"` //地域
 	PostTime    int64             `json:"posttime"`
 	Nodes       []*topo.Node      `json:"nodes"`
 	FailureInfo *topo.FailureInfo `json:"failure_info"`

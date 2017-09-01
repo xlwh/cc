@@ -68,6 +68,7 @@ func showHelp() {
 
 func main() {
 	//load config
+	//执行命令的用户
 	user, err := user.Current()
 	if err != nil {
 		fmt.Println(err)
@@ -85,21 +86,22 @@ func main() {
 		app.Name = "cli"
 		app.Usage = "cluster manage tool"
 
+		//cli工具支持的命令
 		app.Commands = []cli.Command{
-			initialize.Command,
-			initialize.Command_node,
-			c.AppAddCommand,
-			c.AppDelCommand,
-			c.AppModCommand,
-			c.AppListCommand,
+			initialize.Command,      //初始化服务
+			initialize.Command_node, //初始化node
+			c.AppAddCommand,         //新建app
+			c.AppDelCommand,         //删除app
+			c.AppModCommand,         //读写修改
+			c.AppListCommand,        //查询所有的app
 			c.ConfigCommand,
-			c.UserAddCommand,
-			c.UserDelCommand,
-			c.UserGetCommand,
-			c.ListFailoverRecordCommand,
+			c.UserAddCommand,            //新增用户
+			c.UserDelCommand,            //删除用户
+			c.UserGetCommand,            //查询用户
+			c.ListFailoverRecordCommand, //查询故障迁移list
 			c.GetFailoverRecordCommand,
-			c.TopoCommand,
-			c.TakeoverClusterCommand,
+			c.TopoCommand,            //查询拓扑信息
+			c.TakeoverClusterCommand, //执行集群故障迁移
 		}
 		arg := append(os.Args)
 		for _, cmd := range app.Commands {

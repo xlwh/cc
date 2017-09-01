@@ -116,6 +116,7 @@ func (self *Inspector) Run() {
 
 	// FetchClusterNodesInterval not support heat loading
 	//定时器，定时运行任务
+	//【核心方法】
 	tickChan := time.NewTicker(appconfig.FetchClusterNodesInterval).C
 	for {
 		select {

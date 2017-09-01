@@ -47,7 +47,7 @@ func (m *MigrateManager) UnLockQ() {
 	m.mutex.Unlock()
 }
 
-//创建task
+//创建数据迁移task
 func (m *MigrateManager) CreateTask(sourceId, targetId string, ranges []topo.Range, cluster *topo.Cluster) (*MigrateTask, error) {
 	sourceRS := cluster.FindReplicaSetByNode(sourceId)
 	targetRS := cluster.FindReplicaSetByNode(targetId)
@@ -243,6 +243,8 @@ func (m *MigrateManager) handleTaskChange(task *MigrateTask, cluster *topo.Clust
 
 //处理节点状态改变，进行故障迁移等事情
 //只允许一个任务在运行
+//遍历处理node中的Migrating和Importing
+//这里要关注它选择的哪个节点去进行数据迁移，策略是什么
 func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 	// 如果存在迁移任务，先跳过，等结束后再处理
 	if len(m.tasks) > 0 {
@@ -278,8 +280,10 @@ func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 			}
 
 			// Source  优先是从Master上处理
+			//???????????????
 			source := node
 			if !node.IsMaster() {
+				//node
 				srs := cluster.FindReplicaSetByNode(node.Id)
 				if srs != nil {
 					//找到这个节点的主
@@ -287,7 +291,7 @@ func (m *MigrateManager) HandleNodeStateChange(cluster *topo.Cluster) {
 				}
 			}
 
-			// Target
+			// Target  读取待处理的node
 			rs := cluster.FindReplicaSetByNode(id)
 
 			//如果source已经挂了，那这份数据就没法迁移了?

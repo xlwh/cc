@@ -119,7 +119,7 @@ func (t *MigrateTask) migrateSlot(slot int, keysPer int) (int, error, string) {
 	rs := t.SourceReplicaSet()
 	//源节点
 	sourceNode := t.SourceNode()
-	//目标节点
+	//目标节点：目标节点怎么选择？？
 	targetNode := t.TargetNode()
 
 	//1. 标记Target分片Master为IMPORTING
@@ -305,6 +305,7 @@ func (t *MigrateTask) Run() {
 	if t.CurrentState() == StateNew {
 		t.SetState(StateRunning)
 	}
+	//待处理的key
 	prev_key := ""
 	timeout_cnt := 0
 	//遍历range，处理slot
@@ -322,10 +323,12 @@ func (t *MigrateTask) Run() {
 		if r.Right > 16383 {
 			r.Right = 16383
 		}
-		t.currRangeIndex = i
-		t.currSlot = r.Left
-		t.totalKeysInSlot = 0
+
+		t.currRangeIndex = i  //当前处理的索引
+		t.currSlot = r.Left   //当前的slot
+		t.totalKeysInSlot = 0 //在slot中的总的slot
 		for t.currSlot <= r.Right {
+			//????
 			t.streamPub(true)
 
 			// 尽量在迁移完一个完整Slot或遇到错误时，再进行状态的转换
@@ -352,6 +355,8 @@ func (t *MigrateTask) Run() {
 			t.totalKeysInSlot += nkeys
 			// Check remains again
 			seed := t.SourceNode()
+
+			//读取判断迁移状态
 			remains, err2 := redis.CountKeysInSlot(seed.Addr(), t.currSlot)
 			if err2 != nil {
 				remains = -1
@@ -398,6 +403,7 @@ func (t *MigrateTask) Run() {
 	t.currSlot--
 	t.SetState(StateDone)
 quit:
+	//发布一个消息
 	t.streamPub(false)
 }
 

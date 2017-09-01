@@ -11,10 +11,12 @@ import (
 	"github.com/ksarch-saas/cc/utils"
 )
 
+//获取Leader的地址
 func MkUrl(path string) string {
 	return "http://" + meta.LeaderHttpAddress() + path
 }
 
+//把本地的node信息同步给cluster controller
 func SendRegionTopoSnapshot(nodes []*topo.Node, failureInfo *topo.FailureInfo) error {
 	params := &api.RegionSnapshotParams{
 		Region:      meta.LocalRegion(),
@@ -23,6 +25,7 @@ func SendRegionTopoSnapshot(nodes []*topo.Node, failureInfo *topo.FailureInfo) e
 		FailureInfo: failureInfo,
 	}
 
+	//超时时间设定了30 ms
 	resp, err := utils.HttpPost(MkUrl(api.RegionSnapshotPath), params, 30*time.Second)
 	if err != nil {
 		return err
@@ -42,6 +45,8 @@ func containsNode(node *topo.Node, nodes []*topo.Node) bool {
 	return false
 }
 
+//判断一个集群是不是挂了
+//判断的依据:超过一半的mater或者一半的node都挂了
 func (self *Inspector) IsClusterDamaged(cluster *topo.Cluster, seeds []*topo.Node) bool {
 	// more than half masters dead
 	numFail := 0
@@ -74,6 +79,8 @@ func (self *Inspector) IsClusterDamaged(cluster *topo.Cluster, seeds []*topo.Nod
 	return true
 }
 
+//针对 len(failnodes) == len (freednodes) 情况自动修复
+//自动恢复被摘除的节点
 func FixClusterCircle() {
 	// 定时fixcluster，针对 len(failnodes) == len (freednodes) 情况自动修复
 	app := meta.GetAppConfig()
@@ -85,33 +92,38 @@ func FixClusterCircle() {
 	tickChan := time.NewTicker(time.Second * time.Duration(trickerTime)).C
 	for {
 		select {
-			case <-tickChan:
-				app = meta.GetAppConfig()
-				autouFixCluster := app.AutoFixCluster
-				glog.Infof("ClusterLeader:%s, RegionLeader:%s", meta.ClusterLeaderZNodeName(), meta.RegionLeaderZNodeName())
-				if meta.IsClusterLeader() && autouFixCluster {
-					addr := meta.LeaderHttpAddress()
-					url := "http://" + addr + api.FixClusterPath
-					_, err := utils.HttpPost(url, nil, 0)
-					if err != nil {
-						glog.Info(err.Error())
-					}
+		case <-tickChan:
+			app = meta.GetAppConfig()
+			autouFixCluster := app.AutoFixCluster
+			glog.Infof("ClusterLeader:%s, RegionLeader:%s", meta.ClusterLeaderZNodeName(), meta.RegionLeaderZNodeName())
+			if meta.IsClusterLeader() && autouFixCluster {
+				addr := meta.LeaderHttpAddress()
+				url := "http://" + addr + api.FixClusterPath
+				_, err := utils.HttpPost(url, nil, 0)
+				if err != nil {
+					glog.Info(err.Error())
 				}
 			}
+		}
 	}
 }
 
+//运行inspector，是一个核心的方法
 func (self *Inspector) Run() {
+	//周期性修复
 	go FixClusterCircle()
 	appconfig := meta.GetAppConfig()
 	// FetchClusterNodesInterval not support heat loading
+	//定时器，定时运行任务
 	tickChan := time.NewTicker(appconfig.FetchClusterNodesInterval).C
 	for {
 		select {
 		case <-tickChan:
+			//只有leader才有权限处理
 			if !meta.IsRegionLeader() {
 				continue
 			}
+			//和redis交互，拉取拓扑
 			cluster, seeds, err := self.BuildClusterTopo()
 			if err != nil {
 				glog.Infof("build cluster topo failed, %v", err)
@@ -119,7 +131,10 @@ func (self *Inspector) Run() {
 			if cluster == nil {
 				continue
 			}
+
+			//获取fail信息
 			var failureInfo *topo.FailureInfo
+			//controller在主地域并且集群都挂了的情况，记录Fail，发送给cluster leader
 			if meta.IsInMasterRegion() && self.IsClusterDamaged(cluster, seeds) {
 				failureInfo = &topo.FailureInfo{Seeds: seeds}
 			}
@@ -127,6 +142,8 @@ func (self *Inspector) Run() {
 			if err == nil {
 				nodes = cluster.LocalRegionNodes()
 			}
+
+			//把信息发给cluster leader进行同步
 			err = SendRegionTopoSnapshot(nodes, failureInfo)
 			if err != nil {
 				glog.Infof("send snapshot failed, %v", err)

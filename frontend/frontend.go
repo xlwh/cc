@@ -25,31 +25,32 @@ type FrontEnd struct {
 
 func NewFrontEnd(c *cc.Controller, httpPort, wsPort int) *FrontEnd {
 	fe := &FrontEnd{
-		C:              c,
-		Router:         gin.Default(),
-		HttpBindAddr:   fmt.Sprintf(":%d", httpPort),
+		C:              c,                            //controller实例
+		Router:         gin.Default(),                //路由
+		HttpBindAddr:   fmt.Sprintf(":%d", httpPort), //端口
 		WsBindAddr:     fmt.Sprintf(":%d", wsPort),
-		ProcessTimeout: 60,
+		ProcessTimeout: 60, //请求处理超时
 	}
 	//set  ReleaseMode
 	gin.SetMode(gin.ReleaseMode)
 
+	//有token进行权限验证
 	store := auth.NewTokenStore("r3")
 	tokenAuth := auth.NewTokenAuth(nil, store, nil)
 
 	//注册http路由
-	fe.Router.Static("/ui", "./public")
+	fe.Router.Static("/ui", "./public") //前端页面
 	fe.Router.GET(api.AppInfoPath, fe.HandleAppInfo)
 	fe.Router.GET(api.AppStatusPath, fe.HandleAppStatus)
 	fe.Router.GET(api.FetchReplicaSetsPath, fe.HandleFetchReplicaSets)
 	fe.Router.POST(api.LogSlicePath, fe.HandleLogSlice)
-	fe.Router.POST(api.RegionSnapshotPath, fe.HandleRegionSnapshot)
+	fe.Router.POST(api.RegionSnapshotPath, fe.HandleRegionSnapshot) //【内部自动调用，无token验证】接收regin controller发送过来的seeds和failInfo
 	fe.Router.POST(api.MigrateCreatePath, tokenAuth.HandleFunc(fe.HandleMigrateCreate))
 	fe.Router.POST(api.MigratePausePath, tokenAuth.HandleFunc(fe.HandleMigratePause))
 	fe.Router.POST(api.MigrateResumePath, tokenAuth.HandleFunc(fe.HandleMigrateResume))
 	fe.Router.POST(api.MigrateCancelPath, tokenAuth.HandleFunc(fe.HandleMigrateCancel))
 	fe.Router.POST(api.MigrateRecoverPath, tokenAuth.HandleFunc(fe.HandleMigrateRecover))
-	fe.Router.GET(api.FetchMigrationTasksPath, fe.HandleFetchMigrationTasks)
+	fe.Router.GET(api.FetchMigrationTasksPath, fe.HandleFetchMigrationTasks) //【内部自动调用，无token验证】读取迁移任务
 	fe.Router.POST(api.RebalancePath, tokenAuth.HandleFunc(fe.HandleRebalance))
 	fe.Router.POST(api.NodePermPath, tokenAuth.HandleFunc(fe.HandleToggleMode))
 	fe.Router.POST(api.NodeMeetPath, tokenAuth.HandleFunc(fe.HandleMeetNode))
@@ -59,8 +60,8 @@ func NewFrontEnd(c *cc.Controller, httpPort, wsPort int) *FrontEnd {
 	fe.Router.POST(api.MakeReplicaSetPath, tokenAuth.HandleFunc(fe.HandleMakeReplicaSet))
 	fe.Router.POST(api.FailoverTakeoverPath, tokenAuth.HandleFunc(fe.HandleFailoverTakeover))
 	fe.Router.POST(api.UpdateTokenId, tokenAuth.HandleFunc(fe.HandleUpdateTokenId))
-	fe.Router.POST(api.MergeSeedsPath, fe.HandleMergeSeeds)
-	fe.Router.POST(api.FixClusterPath, fe.HandleFixCluster)
+	fe.Router.POST(api.MergeSeedsPath, fe.HandleMergeSeeds) //【内部自动调用，无token验证】node记录同步
+	fe.Router.POST(api.FixClusterPath, fe.HandleFixCluster) //【内部自动调用，无token验证】FixCLuster
 
 	return fe
 }
@@ -70,6 +71,7 @@ func (fe *FrontEnd) Run() {
 	fe.Router.Run(fe.HttpBindAddr)
 }
 
+//处理regin controller发送过来的seeds和failInfo
 func (fe *FrontEnd) HandleRegionSnapshot(c *gin.Context) {
 	var params api.RegionSnapshotParams
 	c.Bind(&params)

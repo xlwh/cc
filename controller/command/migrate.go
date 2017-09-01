@@ -12,6 +12,7 @@ type MigrateCommand struct {
 	Ranges   []topo.Range //range
 }
 
+//故障迁移：只是创建一个task
 func (self *MigrateCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	cs := c.ClusterState
 	cluster := cs.GetClusterSnapshot()

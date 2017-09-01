@@ -3,7 +3,7 @@ package api
 const (
 	AppInfoPath             = "/app/info"
 	AppStatusPath           = "/app/status"
-	RegionSnapshotPath      = "/region/snapshot"
+	RegionSnapshotPath      = "/region/snapshot" //接收regin controller发送过来的seeds和failInfo
 	MergeSeedsPath          = "/region/mergeseeds"
 	MigrateCreatePath       = "/migrate/create"
 	MigratePausePath        = "/migrate/pause"

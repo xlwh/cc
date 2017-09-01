@@ -406,6 +406,7 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 		cluster.BuildReplicaSets()
 	}
 
+	//更新本地记录的node列表
 	meta.MergeSeeds(cluster.LocalRegionNodes())
 	self.ClusterTopo = cluster
 	return cluster, seeds, nil

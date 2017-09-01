@@ -90,7 +90,7 @@ func main() {
 	//启动所有的流
 	streams.StartAllStreams()
 
-	//订阅日志流
+	//订阅日志流(另外的分支，可以先不看)
 	streams.LogStream.Sub(log.WriteFileHandler)
 	streams.LogStream.Sub(log.WriteRingBufferHandler)
 

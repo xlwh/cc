@@ -14,6 +14,8 @@ type UpdateRegionCommand struct {
 	Nodes  []*topo.Node
 }
 
+//更新状态机，广播摘除故障实例
+//只是屏蔽读写，没有进行迁移
 func (self *UpdateRegionCommand) Execute(c *cc.Controller) (cc.Result, error) {
 	if len(self.Nodes) == 0 {
 		return nil, nil
@@ -45,6 +47,7 @@ func (self *UpdateRegionCommand) Execute(c *cc.Controller) (cc.Result, error) {
 			}
 		}
 		// Fix chained replication: slave's parent is slave.
+		//在本地域，并且节点不是主
 		if meta.LocalRegion() == self.Region && !node.IsMaster() {
 			parent := cs.FindNode(node.ParentId)
 			// Parent is not master?

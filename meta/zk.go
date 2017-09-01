@@ -15,6 +15,7 @@ const (
 	PERM_FILE      = zookeeper.PermAdmin | zookeeper.PermRead | zookeeper.PermWrite
 )
 
+//解析ip，可以放到工具包里面去
 func resolveIPv4Addr(addr string) (string, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -47,6 +48,7 @@ func resolveZkAddr(zkAddr string) ([]string, error) {
 	return resolved, nil
 }
 
+//连接zk
 func DialZk(zkAddr string) (*zookeeper.Conn, <-chan zookeeper.Event, error) {
 	resolvedZkAddr, err := resolveZkAddr(zkAddr)
 	if err != nil {
@@ -86,6 +88,7 @@ func CreateRecursive(zconn *zookeeper.Conn, zkPath, value string, flags int32, a
 	return
 }
 
+//获取用户的token
 func GetUserToken(user string) (string, error) {
 	tokenPath := "/r3/users/" + user
 	token, _, err := meta.zconn.Get(tokenPath)

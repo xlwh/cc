@@ -9,6 +9,7 @@ import (
 	zookeeper "github.com/samuel/go-zookeeper/zk"
 )
 
+//故障迁移信息记录
 type MigrateMeta struct {
 	SourceId string
 	TargetId string
@@ -16,6 +17,7 @@ type MigrateMeta struct {
 	TaskId   string // SourceId[0:6]-TargetId[0:6]
 }
 
+//针对zk中的记录，进行相应的增删改查
 func AddMigrateTask(taskMeta *MigrateMeta) error {
 	appname := meta.appName
 	zconn := meta.zconn

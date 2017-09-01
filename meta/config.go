@@ -21,24 +21,26 @@ const (
 	DEFAULT_FIXCLUSTER_CIRCLE                          = 10
 )
 
+//服务app的配置
 type AppConfig struct {
-	AppName                   string
-	AutoEnableSlaveRead       bool
-	AutoEnableMasterWrite     bool
-	AutoFailover              bool
+	AppName                   string //app名字
+	AutoEnableSlaveRead       bool   //自动屏蔽读
+	AutoEnableMasterWrite     bool   //自动屏蔽写
+	AutoFailover              bool   //自动故障迁移
 	AutoFailoverInterval      time.Duration
-	MasterRegion              string
-	Regions                   []string
+	MasterRegion              string   //Mater所在的地域
+	Regions                   []string //区域
 	MigrateKeysEachTime       int
-	MigrateKeysStep       	  int
-	MigrateTimeout            int
+	MigrateKeysStep           int //key迁移的进度
+	MigrateTimeout            int //迁移超时设置
 	SlaveFailoverLimit        bool
 	FetchClusterNodesInterval time.Duration
 	MigrateConcurrency        int
-	FixClusterCircle		  int
-	AutoFixCluster			  bool
+	FixClusterCircle          int  //fix周期
+	AutoFixCluster            bool //自动fix集群特性
 }
 
+//controller配置
 type ControllerConfig struct {
 	Ip       string
 	HttpPort int
@@ -46,17 +48,19 @@ type ControllerConfig struct {
 	Region   string
 }
 
+//故障迁移记录
 type FailoverRecord struct {
-	AppName   string
+	AppName   string //App名
 	NodeId    string
 	NodeAddr  string
 	Timestamp time.Time
 	Region    string
 	Tag       string
-	Role      string
-	Ranges    []topo.Range
+	Role      string       //角色
+	Ranges    []topo.Range //slot范围
 }
 
+//监听zk中app配置改变，类似于配置热加载的特性
 func (m *Meta) handleAppConfigChanged(watch <-chan zookeeper.Event) {
 	for {
 		event := <-watch
@@ -103,6 +107,7 @@ func (m *Meta) handleAppConfigChanged(watch <-chan zookeeper.Event) {
 	}
 }
 
+//从zk中拉取app配置
 func (m *Meta) FetchAppConfig() (*AppConfig, <-chan zookeeper.Event, error) {
 	zconn := m.zconn
 	appName := m.appName
@@ -148,6 +153,7 @@ func (m *Meta) FetchAppConfig() (*AppConfig, <-chan zookeeper.Event, error) {
 	return &c, watch, nil
 }
 
+//在zk中注册一个新的controller
 func (m *Meta) RegisterLocalController() error {
 	zconn := m.zconn
 	zkPath := fmt.Sprintf(m.ccDirPath + "/cc_" + m.localRegion + "_")
@@ -169,6 +175,7 @@ func (m *Meta) RegisterLocalController() error {
 	return err
 }
 
+//从zk中拉取controller配置
 func (m *Meta) FetchControllerConfig(zkNode string) (*ControllerConfig, <-chan zookeeper.Event, error) {
 	data, _, watch, err := m.zconn.GetW(m.ccDirPath + "/" + zkNode)
 	if err != nil {
@@ -182,6 +189,7 @@ func (m *Meta) FetchControllerConfig(zkNode string) (*ControllerConfig, <-chan z
 	return &c, watch, nil
 }
 
+//判断是否在做故障迁移
 func (m *Meta) IsDoingFailover() (bool, error) {
 	exist, _, err := m.zconn.Exists("/r3/failover/doing")
 	if err == nil {

@@ -9,6 +9,7 @@ import (
 	zookeeper "github.com/samuel/go-zookeeper/zk"
 )
 
+//从zk中读取controller配置，同步到本地meta中的记录
 func (m *Meta) CheckLeaders(watch bool) (string, string, <-chan zookeeper.Event, error) {
 	zkPath := m.ccDirPath
 	zconn := m.zconn
@@ -77,6 +78,7 @@ func (m *Meta) CheckLeaders(watch bool) (string, string, <-chan zookeeper.Event,
 	return clusterLeader, regionLeader, watcher, nil
 }
 
+//注册cluster配置状态监听
 func (m *Meta) handleClusterLeaderConfigChanged(znode string, watch <-chan zookeeper.Event) {
 	for {
 		event := <-watch
@@ -100,6 +102,7 @@ func (m *Meta) handleClusterLeaderConfigChanged(znode string, watch <-chan zooke
 	}
 }
 
+//注册本地controller配置变化监听
 func (m *Meta) handleRegionLeaderConfigChanged(znode string, watch <-chan zookeeper.Event) {
 	for {
 		event := <-watch
@@ -123,11 +126,14 @@ func (m *Meta) handleRegionLeaderConfigChanged(znode string, watch <-chan zookee
 	}
 }
 
+//服务选主
 func (m *Meta) ElectLeader() (<-chan zookeeper.Event, error) {
+	//检查更新本地COntroller配置
 	clusterLeader, regionLeader, watcher, err := m.CheckLeaders(true)
 	if err != nil {
 		return watcher, err
 	}
+	//如果第一次没有拿到配置，就一直重试直到成功
 	if clusterLeader == "" || regionLeader == "" {
 		for {
 			glog.Info("meta: get leaders failed. will retry")
@@ -141,24 +147,32 @@ func (m *Meta) ElectLeader() (<-chan zookeeper.Event, error) {
 
 	glog.Infof("meta: clusterleader:%s, regionleader:%s", clusterLeader, regionLeader)
 
+	//从zk中读取到的最新的controller主信息和本地记录的不一致
 	if m.clusterLeaderZNodeName != clusterLeader {
 		// 获取ClusterLeader配置
 		c, w, err := m.FetchControllerConfig(clusterLeader)
 		if err != nil {
 			return watcher, err
 		}
+		//重新设置cluster主
 		m.clusterLeaderConfig = c
 		m.clusterLeaderZNodeName = clusterLeader
+
+		//注册状态变化监听
 		go m.handleClusterLeaderConfigChanged(clusterLeader, w)
 	}
 
+	//从zk中读取到的最新的region的主的信息和本地meta中记录的不一致
 	if m.regionLeaderZNodeName != regionLeader {
 		c, w, err := m.FetchControllerConfig(regionLeader)
 		if err != nil {
 			return watcher, err
 		}
+		//重新设置region配置
 		m.regionLeaderConfig = c
 		m.regionLeaderZNodeName = regionLeader
+
+		//注册状态变化的监听
 		go m.handleRegionLeaderConfigChanged(regionLeader, w)
 	}
 	return watcher, nil

@@ -125,7 +125,6 @@ func (self *Inspector) Run() {
 			if !meta.IsRegionLeader() {
 				continue
 			}
-
 			//和redis交互，拉取拓扑，更新本地的拓扑，会把Fail的节点去掉
 			cluster, seeds, err := self.BuildClusterTopo()
 			if err != nil {

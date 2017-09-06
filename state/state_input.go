@@ -36,32 +36,32 @@ var CmdNames = map[InputField]string{
 func (f InputField) String() string {
 	switch f {
 	case T:
-		return "T"
+		return "T" //true
 	case F:
-		return "F"
+		return "F" //fasle
 	case FAIL:
-		return "FAIL"
+		return "FAIL" //fail
 	case FINE:
-		return "FINE"
+		return "FINE" //no fail
 	case S:
-		return "S"
+		return "S" //slave
 	case M:
-		return "M"
+		return "M" //master
 	case ANY:
-		return "*"
+		return "*" //any
 	default:
 		return CmdNames[f]
 	}
 }
 
 /// Input
-
+//状态输入五元组
 type Input struct {
 	Read    InputField
 	Write   InputField
 	Fail    InputField
-	Role    InputField
-	Command InputField
+	Role    InputField //角色
+	Command InputField //命令
 }
 
 // 判断Input是否等价，ANY为通配

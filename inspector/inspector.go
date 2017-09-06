@@ -243,6 +243,7 @@ func (self *Inspector) isFreeNode(seed *topo.Node) (bool, *topo.Node) {
 }
 
 func (self *Inspector) checkClusterTopo(seed *topo.Node, cluster *topo.Cluster) error {
+
 	resp, err := redis.ClusterNodesInRegion(seed.Addr(), self.LocalRegion)
 	if err != nil && strings.HasPrefix(err.Error(), "ERR Wrong CLUSTER subcommand or number of arguments") {
 		//server version do not support 'cluster nodes extra [region]'
@@ -259,6 +260,7 @@ func (self *Inspector) checkClusterTopo(seed *topo.Node, cluster *topo.Cluster) 
 	}
 
 	var summary topo.SummaryInfo
+	//按行读取summary
 	lines := strings.Split(resp, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "# ") {
@@ -284,6 +286,7 @@ func (self *Inspector) checkClusterTopo(seed *topo.Node, cluster *topo.Cluster) 
 		if s.Ip == "127.0.0.1" {
 			s.Ip = seed.Ip
 		}
+		//当前节点
 		node := cluster.FindNode(s.Id)
 		if node == nil {
 			if s.PFail {
@@ -294,6 +297,7 @@ func (self *Inspector) checkClusterTopo(seed *topo.Node, cluster *topo.Cluster) 
 		}
 
 		// 对比节点数据是否相同
+		//node 是当前seed上的节点，s是从node上读取的别的节点
 		if !node.Compare(s) {
 			glog.Infof("%#v vs %#v different", s, node)
 			if s.Tag == "-" && node.Tag != "-" {
@@ -394,6 +398,7 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 
 	// 检查所有节点返回的信息是不是相同，如果不同说明正在变化中，直接返回等待重试
 	if len(seeds) > 1 {
+		//遍历新的seeds
 		for _, s := range seeds {
 			if s == seed {
 				continue
@@ -404,6 +409,7 @@ func (self *Inspector) BuildClusterTopo() (*topo.Cluster, []*topo.Node, error) {
 				if free {
 					node.Free = true
 					glog.Infof("Found free node %s", node.Addr())
+					//把FreeNode添加到Cluster中
 					cluster.AddNode(node)
 				} else {
 					glog.Infof("checkClusterTopo failed")

@@ -11,21 +11,24 @@ var (
 	ErrStateNotExist       = errors.New("fsm: state not exist")
 )
 
+//状态
 type State struct {
-	Name    string
-	OnEnter func(ctx interface{})
-	OnLeave func(ctx interface{})
+	Name    string                //状态名
+	OnEnter func(ctx interface{}) //事件进入回调
+	OnLeave func(ctx interface{}) //状态结束回调
 }
 
+//状态变换
 type Transition struct {
 	From       string
 	To         string
-	Input      Input
-	Priority   int
-	Constraint func(ctx interface{}) bool
-	Apply      func(ctx interface{})
+	Input      Input                      //输入五元组:
+	Priority   int                        //优先级
+	Constraint func(ctx interface{}) bool //约束函数
+	Apply      func(ctx interface{})      //某个处理函数
 }
 
+//判断Input是否等价，ANY为通配
 type Input interface {
 	Eq(Input) bool
 }
@@ -33,10 +36,11 @@ type Input interface {
 /// StateModel
 
 type StateModel struct {
-	States     map[string]*State
-	TransTable map[string][]*Transition
+	States     map[string]*State        //状态集合
+	TransTable map[string][]*Transition //变换集合
 }
 
+//创建一个空的StateModel
 func NewStateModel() *StateModel {
 	m := &StateModel{
 		States:     map[string]*State{},
@@ -45,10 +49,13 @@ func NewStateModel() *StateModel {
 	return m
 }
 
+//新增一个状态
 func (m *StateModel) AddState(s *State) {
+	//状态名字:state
 	m.States[s.Name] = s
 }
 
+//新增一个状态变换
 func (m *StateModel) AddTransition(t *Transition) {
 	_, ok := m.States[t.From]
 	if !ok {
@@ -98,22 +105,26 @@ func NewStateMachine(initalState string, model *StateModel) *StateMachine {
 	return m
 }
 
+//返回当前的状态
 func (m *StateMachine) CurrentState() string {
 	return m.current
 }
 
+//提前
 func (m *StateMachine) Advance(ctx interface{}, input Input) (string, error) {
 	model := m.model
 	if model == nil {
 		return "", ErrEmptyStateModel
 	}
 
+	//当前状态
 	curr := m.CurrentState()
 	_, ok := m.model.States[curr]
 	if !ok {
 		return "", ErrStateNotExist
 	}
 
+	//状态是否允许变换
 	ts, ok := m.model.TransTable[curr]
 	if !ok {
 		return "", ErrEmptyStateTrasition

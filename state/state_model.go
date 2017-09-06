@@ -17,6 +17,7 @@ const (
 	StateStandby           = "STANDBY"
 )
 
+//读取节点当前的状态
 func getNodeState(i interface{}) *NodeState {
 	ctx := i.(StateContext)
 	ns := ctx.NodeState
@@ -44,14 +45,17 @@ var (
 		},
 	}
 
+	//等待迁移结束
 	WaitFailoverEndState = &fsm.State{
 		Name: StateWaitFailoverEnd,
 		OnEnter: func(i interface{}) {
+			//记录事件日志
 			log.Event(getNodeState(i).Addr(), "Enter WAIT_FAILOVER_END state")
 
 			ctx := i.(StateContext)
 			ns := ctx.NodeState
 
+			//更新meta中的记录
 			record := &meta.FailoverRecord{
 				AppName:   meta.AppName(),
 				NodeId:    ns.Id(),
@@ -106,15 +110,17 @@ var (
 /// Constraints
 
 var (
+	//Slave故障迁移限定条件
 	SlaveAutoFailoverConstraint = func(i interface{}) bool {
 		ctx := i.(StateContext)
-		cs := ctx.ClusterState
-		ns := ctx.NodeState
+		cs := ctx.ClusterState //集群状态
+		ns := ctx.NodeState    //节点状态
 
 		rs := cs.FindReplicaSetByNode(ns.Id())
 		if rs == nil {
 			return false
 		}
+		//读取app配置
 		app := meta.GetAppConfig()
 		if app.SlaveFailoverLimit {
 			// 至少还有一个节点
@@ -123,6 +129,7 @@ var (
 				return false
 			}
 			// 最多一个故障节点(FAIL或不处于Running状态)
+			//不能同时处理多个节点
 			for _, node := range localRegionNodes {
 				if node.Id == ns.Id() {
 					continue
@@ -133,10 +140,12 @@ var (
 				}
 			}
 		}
+		//满足限定条件，可以进行故障迁移
 		log.Info(getNodeState(i).Addr(), "Can failover slave")
 		return true
 	}
 
+	//Master迁移限定条件
 	MasterAutoFailoverConstraint = func(i interface{}) bool {
 		ctx := i.(StateContext)
 		cs := ctx.ClusterState
@@ -148,6 +157,7 @@ var (
 			return false
 		}
 
+		//找不到replicaset
 		rs := cs.FindReplicaSetByNode(ns.Id())
 		if rs == nil {
 			log.Warning(ns.Addr(), "Check constraint failed, can not find replicaset by the failure node")
@@ -172,6 +182,7 @@ var (
 			}
 		}
 		// 是否有其他Failover正在进行
+		//同时只能有一个任务进行
 		doing, err := meta.IsDoingFailover()
 		if err != nil {
 			log.Warningf(ns.Addr(), "Fetch failover status failed, %v", err)
@@ -227,13 +238,14 @@ var (
 		ctx := i.(StateContext)
 		ns := ctx.NodeState
 
-		// 已经被处理过了
+		// 已经被处理过了，处于Standby
 		if ns.node.IsStandbyMaster() {
 			return true
 		}
 		return false
 	}
 
+	//slaveFail的处理的限制条件
 	SlaveFailoverHandler = func(i interface{}) {
 		ctx := i.(StateContext)
 		cs := ctx.ClusterState
@@ -243,6 +255,7 @@ var (
 			if n.Addr() == ns.Addr() {
 				continue
 			}
+			//没有做一定的限制条件，直接disable
 			resp, err := redis.DisableRead(n.Addr(), ns.Id())
 			if err == nil {
 				log.Infof(ns.Addr(), "Disable read of slave: %s %s", resp, ns.Id())
@@ -251,11 +264,13 @@ var (
 		}
 	}
 
+	//节点重新上线
 	StandbyGotoRunningHandler = func(i interface{}) {
 		ctx := i.(StateContext)
 		ns := ctx.NodeState
 
 		app := meta.GetAppConfig()
+		//只要在app开启了配置的情况下，就可以自动Enable
 		if app.AutoEnableMasterWrite {
 			resp, err := redis.EnableRead(ns.Addr(), ns.Id())
 			if err == nil {
@@ -304,11 +319,12 @@ var (
 )
 
 func init() {
-	RedisNodeStateModel.AddState(RunningState)
-	RedisNodeStateModel.AddState(WaitFailoverBeginState)
-	RedisNodeStateModel.AddState(WaitFailoverEndState)
-	RedisNodeStateModel.AddState(OfflineState)
-	RedisNodeStateModel.AddState(StandbyState)
+	//设置状态，有五种状态
+	RedisNodeStateModel.AddState(RunningState)           //运行中
+	RedisNodeStateModel.AddState(WaitFailoverBeginState) //开始进行故障迁移
+	RedisNodeStateModel.AddState(WaitFailoverEndState)   //故障迁移结束
+	RedisNodeStateModel.AddState(OfflineState)           //离线
+	RedisNodeStateModel.AddState(StandbyState)           //备用状态
 
 	/// State: (WaitFailoverRunning)
 
@@ -316,7 +332,7 @@ func init() {
 	RedisNodeStateModel.AddTransition(&fsm.Transition{
 		From:       StateRunning,
 		To:         StateStandby,
-		Input:      Input{F, F, ANY, ANY, ANY},
+		Input:      Input{F, F, ANY, ANY, ANY}, //Input{read, write, FAIL/NFAIL, role, cmd}
 		Priority:   0,
 		Constraint: nil,
 		Apply:      nil,
@@ -515,7 +531,7 @@ func init() {
 }
 
 type StateContext struct {
-	Input        Input
-	ClusterState *ClusterState
-	NodeState    *NodeState
+	Input        Input         //输入
+	ClusterState *ClusterState //集群状态
+	NodeState    *NodeState    //节点状态
 }

@@ -95,6 +95,7 @@ func (ns *NodeState) AdvanceFSM(cs *ClusterState, cmd InputField) error {
 		ClusterState: cs,
 		NodeState:    ns,
 	}
+
 	ns.fsm.Advance(ctx, input)
 
 	// 发送状态用于记录和实时观察

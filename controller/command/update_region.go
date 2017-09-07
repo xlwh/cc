@@ -54,6 +54,7 @@ func (self *UpdateRegionCommand) Execute(c *cc.Controller) (cc.Result, error) {
 		}
 		// Fix chained replication: slave's parent is slave.
 		//在本地域，并且节点不是主
+		//把grandpa设置为这个节点的从
 		if meta.LocalRegion() == self.Region && !node.IsMaster() {
 			parent := cs.FindNode(node.ParentId)
 			// Parent is not master?

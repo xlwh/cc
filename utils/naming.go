@@ -24,6 +24,7 @@ type NamingResponse struct {
 	Data    interface{} `json:"data"`
 }
 
+//调用BNS的接口，解析BNS
 func ResolvZkFromNaming(service string) (string, error) {
 	resp, err := http.Get(namingUri + "/webfoot/index.php?r=webfoot/ApiInstanceInfo&serviceName=" + service)
 	if resp.StatusCode != 200 {

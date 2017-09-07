@@ -13,6 +13,8 @@ import (
 	"github.com/ksarch-saas/cc/streams"
 	"github.com/ksarch-saas/cc/topo"
 	"github.com/ksarch-saas/cc/utils"
+	"os"
+	"fmt"
 )
 
 //一些全局变量的定义
@@ -50,6 +52,7 @@ func main() {
 		n := topo.NewNodeFromString(addr)
 		if n == nil {
 			glog.Fatal("invalid seeds %s", addr)
+			os.Exit(-1)
 		}
 		seedNodes = append(seedNodes, n)
 	}
